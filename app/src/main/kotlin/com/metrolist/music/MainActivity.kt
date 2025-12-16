@@ -150,7 +150,6 @@ import com.metrolist.music.constants.NavigationBarHeight
 import com.metrolist.music.constants.PauseSearchHistoryKey
 import com.metrolist.music.constants.PureBlackKey
 import com.metrolist.music.constants.SYSTEM_DEFAULT
-
 import com.metrolist.music.constants.SlimNavBarHeight
 import com.metrolist.music.constants.SlimNavBarKey
 import com.metrolist.music.constants.StopMusicOnTaskClearKey
@@ -169,14 +168,12 @@ import com.metrolist.music.ui.component.BottomSheetPage
 import com.metrolist.music.ui.component.IconButton
 import com.metrolist.music.ui.component.LocalBottomSheetPageState
 import com.metrolist.music.ui.component.LocalMenuState
-
 import com.metrolist.music.ui.component.rememberBottomSheetState
 import com.metrolist.music.ui.component.shimmer.ShimmerTheme
 import com.metrolist.music.ui.menu.YouTubeSongMenu
 import com.metrolist.music.ui.player.BottomSheetPlayer
 import com.metrolist.music.ui.screens.Screens
 import com.metrolist.music.ui.screens.navigationBuilder
-
 import com.metrolist.music.ui.screens.settings.DarkMode
 import com.metrolist.music.ui.screens.settings.NavigationTab
 import com.metrolist.music.ui.theme.ColorSaver
@@ -612,8 +609,6 @@ class MainActivity : ComponentActivity() {
                         }
                     }
 
-
-
                     LaunchedEffect(playerConnection) {
                         val player = playerConnection?.player ?: return@LaunchedEffect
                         if (player.currentMediaItem == null) {
@@ -782,7 +777,6 @@ class MainActivity : ComponentActivity() {
                                         )
                                     }
                                 }
-
                             },
                             bottomBar = {
                                 if (!showRail) {
@@ -1067,8 +1061,6 @@ class MainActivity : ComponentActivity() {
                             }
                         }
                     }
-
-
                 }
             }
         }
