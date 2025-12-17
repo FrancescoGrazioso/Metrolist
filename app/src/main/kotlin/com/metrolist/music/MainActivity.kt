@@ -817,7 +817,7 @@ class MainActivity : ComponentActivity() {
                                         NavigationBar(
                                             modifier = Modifier
                                                 .align(Alignment.BottomCenter)
-                                                .height(bottomInset + getNavPadding())
+                                                .height(bottomInset + animatedNavBarHeight)
                                                 .offset {
                                                     if (navigationBarHeight == 0.dp) {
                                                         IntOffset(
