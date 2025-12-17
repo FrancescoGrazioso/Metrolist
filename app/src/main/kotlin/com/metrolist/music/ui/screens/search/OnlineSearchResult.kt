@@ -3,10 +3,14 @@ package com.metrolist.music.ui.screens.search
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.WindowInsetsSides
 import androidx.compose.foundation.layout.add
 import androidx.compose.foundation.layout.asPaddingValues
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.padding
@@ -21,6 +25,12 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedTextFieldDefaults
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Text
+import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -30,10 +40,13 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.input.TextFieldValue
+import java.net.URLDecoder
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.navigation.NavController
 import com.metrolist.innertube.YouTube.SearchFilter.Companion.FILTER_ALBUM
@@ -83,6 +96,13 @@ fun OnlineSearchResult(
 
     val coroutineScope = rememberCoroutineScope()
     val lazyListState = rememberLazyListState()
+    
+    // Get the search query from navigation arguments
+    val query = remember {
+        navController.currentBackStackEntry?.arguments?.getString("query")?.let { 
+            URLDecoder.decode(it, "UTF-8") 
+        } ?: ""
+    }
 
     val searchFilter by viewModel.filter.collectAsState()
     val searchSummary = viewModel.summaryPage
@@ -185,101 +205,131 @@ fun OnlineSearchResult(
         )
     }
 
-    LazyColumn(
-        state = lazyListState,
-        contentPadding =
-        LocalPlayerAwareWindowInsets.current
-            .add(WindowInsets(top = SearchFilterHeight))
-            .add(WindowInsets.systemBars.only(WindowInsetsSides.Horizontal))
-            .asPaddingValues(),
-    ) {
-        if (searchFilter == null) {
-            searchSummary?.summaries?.forEach { summary ->
-                item {
-                    NavigationTitle(summary.title)
-                }
-
-                items(
-                    items = summary.items,
-                    key = { "${summary.title}/${it.id}/${summary.items.indexOf(it)}" },
-                    itemContent = ytItemContent,
-                )
-            }
-
-            if (searchSummary?.summaries?.isEmpty() == true) {
-                item {
-                    EmptyPlaceholder(
-                        icon = R.drawable.search,
-                        text = stringResource(R.string.no_results_found),
+    Scaffold(
+        topBar = {
+            TopAppBar(
+                title = {
+                    OutlinedTextField(
+                        value = query,
+                        onValueChange = { /* Read-only */ },
+                        readOnly = true,
+                        placeholder = {
+                            Text(text = stringResource(R.string.search_yt_music))
+                        },
+                        leadingIcon = {
+                            IconButton(onClick = { navController.navigateUp() }) {
+                                Icon(
+                                    painter = painterResource(R.drawable.arrow_back),
+                                    contentDescription = null
+                                )
+                            }
+                        },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedContainerColor = Color.Transparent,
+                            unfocusedContainerColor = Color.Transparent,
+                            focusedBorderColor = Color.Transparent,
+                            unfocusedBorderColor = Color.Transparent
+                        )
                     )
-                }
-            }
-        } else {
-            items(
-                items = itemsPage?.items.orEmpty().distinctBy { it.id },
-                key = { "filtered_${it.id}" },
-                itemContent = ytItemContent,
+                },
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = MaterialTheme.colorScheme.surfaceContainer
+                )
             )
+        }
+    ) { paddingValues ->
+        Column(modifier = Modifier.padding(paddingValues)) {
+            ChipsRow(
+                chips =
+                listOf(
+                    null to stringResource(R.string.filter_all),
+                    FILTER_SONG to stringResource(R.string.filter_songs),
+                    FILTER_VIDEO to stringResource(R.string.filter_videos),
+                    FILTER_ALBUM to stringResource(R.string.filter_albums),
+                    FILTER_ARTIST to stringResource(R.string.filter_artists),
+                    FILTER_COMMUNITY_PLAYLIST to stringResource(R.string.filter_community_playlists),
+                    FILTER_FEATURED_PLAYLIST to stringResource(R.string.filter_featured_playlists),
+                ),
+                currentValue = searchFilter,
+                onValueUpdate = {
+                    if (viewModel.filter.value != it) {
+                        viewModel.filter.value = it
+                    }
+                    coroutineScope.launch {
+                        lazyListState.animateScrollToItem(0)
+                    }
+                },
+                modifier = Modifier
+                    .background(MaterialTheme.colorScheme.surface)
+                    .fillMaxWidth()
+            )
+            
+            LazyColumn(
+                state = lazyListState,
+                contentPadding = LocalPlayerAwareWindowInsets.current
+                    .add(WindowInsets.systemBars.only(WindowInsetsSides.Horizontal))
+                    .asPaddingValues(),
+            ) {
+                if (searchFilter == null) {
+                    searchSummary?.summaries?.forEach { summary ->
+                        item {
+                            NavigationTitle(summary.title)
+                        }
 
-            if (itemsPage?.continuation != null) {
-                item(key = "loading") {
-                    ShimmerHost {
-                        repeat(3) {
-                            ListItemPlaceHolder()
+                        items(
+                            items = summary.items,
+                            key = { "${summary.title}/${it.id}/${summary.items.indexOf(it)}" },
+                            itemContent = ytItemContent,
+                        )
+                    }
+
+                    if (searchSummary?.summaries?.isEmpty() == true) {
+                        item {
+                            EmptyPlaceholder(
+                                icon = R.drawable.search,
+                                text = stringResource(R.string.no_results_found),
+                            )
+                        }
+                    }
+                } else {
+                    items(
+                        items = itemsPage?.items.orEmpty().distinctBy { it.id },
+                        key = { "filtered_${it.id}" },
+                        itemContent = ytItemContent,
+                    )
+
+                    if (itemsPage?.continuation != null) {
+                        item(key = "loading") {
+                            ShimmerHost {
+                                repeat(3) {
+                                    ListItemPlaceHolder()
+                                }
+                            }
+                        }
+                    }
+
+                    if (itemsPage?.items?.isEmpty() == true) {
+                        item {
+                            EmptyPlaceholder(
+                                icon = R.drawable.search,
+                                text = stringResource(R.string.no_results_found),
+                            )
                         }
                     }
                 }
-            }
 
-            if (itemsPage?.items?.isEmpty() == true) {
-                item {
-                    EmptyPlaceholder(
-                        icon = R.drawable.search,
-                        text = stringResource(R.string.no_results_found),
-                    )
-                }
-            }
-        }
-
-        if (searchFilter == null && searchSummary == null || searchFilter != null && itemsPage == null) {
-            item {
-                ShimmerHost {
-                    repeat(8) {
-                        ListItemPlaceHolder()
+                if (searchFilter == null && searchSummary == null || searchFilter != null && itemsPage == null) {
+                    item {
+                        ShimmerHost {
+                            repeat(8) {
+                                ListItemPlaceHolder()
+                            }
+                        }
                     }
                 }
             }
         }
     }
-
-    ChipsRow(
-        chips =
-        listOf(
-            null to stringResource(R.string.filter_all),
-            FILTER_SONG to stringResource(R.string.filter_songs),
-            FILTER_VIDEO to stringResource(R.string.filter_videos),
-            FILTER_ALBUM to stringResource(R.string.filter_albums),
-            FILTER_ARTIST to stringResource(R.string.filter_artists),
-            FILTER_COMMUNITY_PLAYLIST to stringResource(R.string.filter_community_playlists),
-            FILTER_FEATURED_PLAYLIST to stringResource(R.string.filter_featured_playlists),
-        ),
-        currentValue = searchFilter,
-        onValueUpdate = {
-            if (viewModel.filter.value != it) {
-                viewModel.filter.value = it
-            }
-            coroutineScope.launch {
-                lazyListState.animateScrollToItem(0)
-            }
-        },
-        modifier =
-        Modifier
-            .background(MaterialTheme.colorScheme.surface)
-            .windowInsetsPadding(
-                WindowInsets.systemBars
-                    .only(WindowInsetsSides.Horizontal + WindowInsetsSides.Top)
-                    .add(WindowInsets(top = AppBarHeight))
-            )
-            .fillMaxWidth()
-    )
 }
