@@ -291,11 +291,11 @@ fun OnlineSearchResult(
             },
             leadingIcon = {
                 IconButton(
-                    onClick = { onDismiss() }
+                    onClick = { navController.navigateUp() }
                 ) {
                     Icon(
                         painter = painterResource(R.drawable.arrow_back),
-                        contentDescription = stringResource(R.string.back),
+                        contentDescription = stringResource(R.string.dismiss),
                         tint = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
