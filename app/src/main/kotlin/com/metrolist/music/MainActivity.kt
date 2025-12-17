@@ -96,6 +96,8 @@ import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.platform.LocalLayoutDirection
+import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.TextRange
@@ -499,6 +501,7 @@ class MainActivity : ComponentActivity() {
                     }
                     val showRail = isLandscape && !inSearchScreen
 
+                    // 🟢 كود OuterTune المطبق على MetroList - NavBar + NavRail بدون لاج
                     // ✅ 1️⃣ State واحدة تتحكم في الظهور (مهم جداً)
                     val showNavBar by remember(
                         shouldShowNavigationBar,
@@ -531,11 +534,7 @@ class MainActivity : ComponentActivity() {
                         }
                     }
 
-                    val navigationBarHeight by animateDpAsState(
-                        targetValue = if (shouldShowNavigationBar && !showRail) NavigationBarHeight else 0.dp,
-                        animationSpec = NavigationBarAnimationSpec,
-                        label = "",
-                    )
+
 
                     val playerBottomSheetState =
                         rememberBottomSheetState(
@@ -551,13 +550,13 @@ class MainActivity : ComponentActivity() {
 
                     val playerAwareWindowInsets = remember(
                         bottomInset,
-                        shouldShowNavigationBar,
+                        animatedNavBarHeight,
                         playerBottomSheetState.isDismissed,
                         showRail,
                     ) {
                         var bottom = bottomInset
-                        if (shouldShowNavigationBar && !showRail) {
-                            bottom += NavigationBarHeight
+                        if (showNavBar) {
+                            bottom += animatedNavBarHeight
                         }
                         if (!playerBottomSheetState.isDismissed) bottom += MiniPlayerHeight
                         windowsInsets
@@ -807,6 +806,7 @@ class MainActivity : ComponentActivity() {
                                 }
                             },
                             bottomBar = {
+                                // ✅ 5️⃣ الاستخدام النهائي (زي OuterTune)
                                 if (!showRail) {
                                     Box {
                                         BottomSheetPlayer(
@@ -821,25 +821,11 @@ class MainActivity : ComponentActivity() {
                                                 .align(Alignment.BottomCenter)
                                                 .height(bottomInset + animatedNavBarHeight)
                                                 .offset {
-                                                    if (navigationBarHeight == 0.dp) {
-                                                        IntOffset(
-                                                            x = 0,
-                                                            y = (bottomInset + NavigationBarHeight).roundToPx(),
-                                                        )
-                                                    } else {
-                                                        val slideOffset =
-                                                            (bottomInset + NavigationBarHeight) *
-                                                                    playerBottomSheetState.progress.coerceIn(
-                                                                        0f,
-                                                                        1f,
-                                                                    )
-                                                        val hideOffset =
-                                                            (bottomInset + NavigationBarHeight) * (1 - navigationBarHeight / NavigationBarHeight)
-                                                        IntOffset(
-                                                            x = 0,
-                                                            y = (slideOffset + hideOffset).roundToPx(),
-                                                        )
-                                                    }
+                                                    IntOffset(
+                                                        x = 0,
+                                                        y = (bottomInset + (NavigationBarHeight - animatedNavBarHeight))
+                                                            .roundToPx()
+                                                    )
                                                 },
                                             containerColor = if (pureBlack)
                                                 Color.Black
@@ -925,6 +911,7 @@ class MainActivity : ComponentActivity() {
                                 .nestedScroll(searchBarScrollBehavior.nestedScrollConnection)
                         ) {
                             Row(Modifier.fillMaxSize()) {
+                                // ✅ 5️⃣ الاستخدام النهائي (زي OuterTune)
                                 if (showRail) {
                                     // ✅ 4️⃣ NavRail بنفس الفكرة (State ثابتة)
                                     NavigationRail(
@@ -957,17 +944,16 @@ class MainActivity : ComponentActivity() {
                                                 },
                                                 onClick = {
                                                     if (isSelected) {
-                                                        navController.currentBackStackEntry?.savedStateHandle?.set("scrollToTop", true)
-                                                        coroutineScope.launch {
-                                                            searchBarScrollBehavior.state.resetHeightOffset()
-                                                        }
+                                                        navController.currentBackStackEntry
+                                                            ?.savedStateHandle
+                                                            ?.set("scrollToTop", true)
                                                     } else {
                                                         navController.navigate(screen.route) {
                                                             popUpTo(navController.graph.startDestinationId) {
-                                                                inclusive = false
+                                                                saveState = true
                                                             }
                                                             launchSingleTop = true
-                                                            restoreState = false
+                                                            restoreState = true
                                                         }
                                                     }
                                                 }
