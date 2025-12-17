@@ -547,18 +547,7 @@ class MainActivity : ComponentActivity() {
                             expandedBound = maxHeight,
                         )
 
-                    // Update BottomSheet bounds when NavBar height changes
-                    LaunchedEffect(animatedNavBarHeight, showRail, shouldShowNavigationBar) {
-                        val newCollapsedBound = bottomInset +
-                            (if (!showRail && shouldShowNavigationBar) animatedNavBarHeight else 0.dp) +
-                            (if (useNewMiniPlayerDesign) MiniPlayerBottomSpacing else 0.dp) +
-                            MiniPlayerHeight
-                        playerBottomSheetState.updateBounds(
-                            dismissedBound = 0.dp,
-                            collapsedBound = newCollapsedBound,
-                            expandedBound = maxHeight
-                        )
-                    }
+
 
                     val playerAwareWindowInsets = remember(
                         bottomInset,
