@@ -58,16 +58,33 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.rotation
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.navigation.NavController
+import com.metrolist.music.LocalDatabase
+import com.metrolist.music.LocalPlayerConnection
 import com.metrolist.music.R
+import com.metrolist.music.models.toMediaMetadata
+import com.metrolist.music.playback.queues.YouTubeQueue
+import com.metrolist.music.ui.component.LocalMenuState
+import com.metrolist.music.ui.menu.YouTubeAlbumMenu
+import com.metrolist.music.ui.menu.YouTubeArtistMenu
+import com.metrolist.music.ui.menu.YouTubePlaylistMenu
+import com.metrolist.music.ui.menu.YouTubeSongMenu
+import com.metrolist.music.constants.SuggestionItemHeight
+import com.metrolist.music.viewmodels.OnlineSearchSuggestionViewModel
+import kotlinx.coroutines.FlowPreview
+import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.debounce
+import kotlinx.coroutines.flow.drop
 import com.metrolist.innertube.YouTube.SearchFilter.Companion.FILTER_ALBUM
 import com.metrolist.innertube.YouTube.SearchFilter.Companion.FILTER_ARTIST
 import com.metrolist.innertube.YouTube.SearchFilter.Companion.FILTER_COMMUNITY_PLAYLIST
@@ -110,6 +127,7 @@ import java.net.URLEncoder
 fun OnlineSearchResult(
     navController: NavController,
     viewModel: OnlineSearchViewModel = hiltViewModel(),
+    suggestionViewModel: OnlineSearchSuggestionViewModel = hiltViewModel(),
     pureBlack: Boolean = false
 ) {
     val menuState = LocalMenuState.current
@@ -167,6 +185,10 @@ fun OnlineSearchResult(
             }
         }
     }
+    
+    // Suggestion states
+    val suggestionViewState by suggestionViewModel.viewState.collectAsState()
+    val database = LocalDatabase.current
 
     LaunchedEffect(lazyListState) {
         snapshotFlow {
@@ -353,115 +375,153 @@ fun OnlineSearchResult(
             tonalElevation = 6.dp,
             shadowElevation = 0.dp
         ) {
-            // Search suggestions content
-            if (isSearchBarExpanded && query.text.isNotEmpty()) {
+            // Real search suggestions content using ViewModel
+            if (isSearchBarExpanded) {
                 LazyColumn(
                     modifier = Modifier.fillMaxWidth()
                 ) {
-                    // Search suggestions based on current query
-                    val suggestions = listOf(
-                        "${query.text} songs",
-                        "${query.text} album",
-                        "${query.text} artist",
-                        "${query.text} playlist",
-                        "${query.text} lyrics"
-                    )
-                    
-                    items(suggestions) { suggestion ->
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .combinedClickable(
-                                    onClick = {
-                                        onSearch(suggestion)
-                                    }
-                                )
-                                .padding(horizontal = 16.dp, vertical = 12.dp),
-                            verticalAlignment = androidx.compose.ui.Alignment.CenterVertically
-                        ) {
-                            Icon(
-                                painter = painterResource(R.drawable.search),
-                                contentDescription = null,
-                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                                modifier = Modifier.padding(end = 16.dp)
-                            )
-                            Text(
-                                text = suggestion,
-                                style = MaterialTheme.typography.bodyLarge,
-                                color = MaterialTheme.colorScheme.onSurface,
-                                modifier = Modifier.weight(1f)
-                            )
-                            IconButton(
-                                onClick = {
-                                    query = TextFieldValue(suggestion, TextRange(suggestion.length))
+                    // Search history items
+                    items(suggestionViewState.history, key = { "history_${it.query}" }) { history ->
+                        SuggestionItem(
+                            query = history.query,
+                            online = false,
+                            onClick = {
+                                onSearch(history.query)
+                                isSearchBarExpanded = false
+                            },
+                            onDelete = {
+                                database.query {
+                                    delete(history)
                                 }
-                            ) {
-                                Icon(
-                                    painter = painterResource(R.drawable.arrow_back),
-                                    contentDescription = null,
-                                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    modifier = Modifier.rotation(225f) // Makes it point up-left like a "fill" arrow
-                                )
-                            }
-                        }
-                    }
-                }
-            } else if (isSearchBarExpanded) {
-                // Show recent searches when expanded but no query
-                LazyColumn(
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    item {
-                        Text(
-                            text = "Recent searches",
-                            style = MaterialTheme.typography.titleMedium,
-                            color = MaterialTheme.colorScheme.onSurface,
-                            modifier = Modifier.padding(16.dp)
+                            },
+                            onFillTextField = {
+                                query = TextFieldValue(history.query, TextRange(history.query.length))
+                            },
+                            pureBlack = pureBlack
                         )
                     }
-                    val recentSearches = listOf(
-                        "Taylor Swift",
-                        "The Weeknd",
-                        "Billie Eilish"
-                    )
-                    
-                    items(recentSearches) { recentSearch ->
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .combinedClickable(
-                                    onClick = {
-                                        query = TextFieldValue(recentSearch, TextRange(recentSearch.length))
-                                        onSearch(recentSearch)
-                                    }
-                                )
-                                .padding(horizontal = 16.dp, vertical = 12.dp),
-                            verticalAlignment = androidx.compose.ui.Alignment.CenterVertically
-                        ) {
-                            Icon(
-                                painter = painterResource(R.drawable.search),
-                                contentDescription = null,
-                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                                modifier = Modifier.padding(end = 16.dp)
-                            )
-                            Text(
-                                text = recentSearch,
-                                style = MaterialTheme.typography.bodyLarge,
-                                color = MaterialTheme.colorScheme.onSurface,
-                                modifier = Modifier.weight(1f)
-                            )
-                            IconButton(
-                                onClick = {
-                                    // Remove from recent searches (placeholder action)
-                                }
-                            ) {
-                                Icon(
-                                    painter = painterResource(R.drawable.close),
-                                    contentDescription = null,
-                                    tint = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                            }
+
+                    // Online suggestions
+                    items(suggestionViewState.suggestions, key = { "suggestion_$it" }) { suggestion ->
+                        SuggestionItem(
+                            query = suggestion,
+                            online = true,
+                            onClick = {
+                                onSearch(suggestion)
+                                isSearchBarExpanded = false
+                            },
+                            onFillTextField = {
+                                query = TextFieldValue(suggestion, TextRange(suggestion.length))
+                            },
+                            pureBlack = pureBlack
+                        )
+                    }
+
+                    // Recommended items from YouTube
+                    if (suggestionViewState.items.isNotEmpty() && suggestionViewState.history.size + suggestionViewState.suggestions.size > 0) {
+                        item(key = "search_divider") {
+                            HorizontalDivider()
                         }
+                    }
+
+                    items(suggestionViewState.items, key = { "item_${it.id}" }) { item ->
+                        YouTubeListItem(
+                            item = item,
+                            isActive = when (item) {
+                                is SongItem -> mediaMetadata?.id == item.id
+                                is AlbumItem -> mediaMetadata?.album?.id == item.id
+                                else -> false
+                            },
+                            isPlaying = isPlaying,
+                            trailingContent = {
+                                IconButton(
+                                    onClick = {
+                                        menuState.show {
+                                            when (item) {
+                                                is SongItem -> YouTubeSongMenu(
+                                                    song = item,
+                                                    navController = navController,
+                                                    onDismiss = menuState::dismiss
+                                                )
+                                                is AlbumItem -> YouTubeAlbumMenu(
+                                                    albumItem = item,
+                                                    navController = navController,
+                                                    onDismiss = menuState::dismiss
+                                                )
+                                                is ArtistItem -> YouTubeArtistMenu(
+                                                    artist = item,
+                                                    onDismiss = menuState::dismiss
+                                                )
+                                                is PlaylistItem -> YouTubePlaylistMenu(
+                                                    playlist = item,
+                                                    coroutineScope = coroutineScope,
+                                                    onDismiss = menuState::dismiss
+                                                )
+                                            }
+                                        }
+                                    }
+                                ) {
+                                    Icon(
+                                        painter = painterResource(R.drawable.more_vert),
+                                        contentDescription = null
+                                    )
+                                }
+                            },
+                            modifier = Modifier.combinedClickable(
+                                onClick = {
+                                    when (item) {
+                                        is SongItem -> {
+                                            if (item.id == mediaMetadata?.id) {
+                                                playerConnection.togglePlayPause()
+                                            } else {
+                                                playerConnection.playQueue(
+                                                    YouTubeQueue.radio(item.toMediaMetadata())
+                                                )
+                                                isSearchBarExpanded = false
+                                            }
+                                        }
+                                        is AlbumItem -> {
+                                            navController.navigate("album/${item.id}")
+                                            isSearchBarExpanded = false
+                                        }
+                                        is ArtistItem -> {
+                                            navController.navigate("artist/${item.id}")
+                                            isSearchBarExpanded = false
+                                        }
+                                        is PlaylistItem -> {
+                                            navController.navigate("online_playlist/${item.id}")
+                                            isSearchBarExpanded = false
+                                        }
+                                    }
+                                },
+                                onLongClick = {
+                                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                    menuState.show {
+                                        when (item) {
+                                            is SongItem -> YouTubeSongMenu(
+                                                song = item,
+                                                navController = navController,
+                                                onDismiss = menuState::dismiss
+                                            )
+                                            is AlbumItem -> YouTubeAlbumMenu(
+                                                albumItem = item,
+                                                navController = navController,
+                                                onDismiss = menuState::dismiss
+                                            )
+                                            is ArtistItem -> YouTubeArtistMenu(
+                                                artist = item,
+                                                onDismiss = menuState::dismiss
+                                            )
+                                            is PlaylistItem -> YouTubePlaylistMenu(
+                                                playlist = item,
+                                                coroutineScope = coroutineScope,
+                                                onDismiss = menuState::dismiss
+                                            )
+                                        }
+                                    }
+                                }
+                            )
+                        )
                     }
                 }
             }
@@ -568,6 +628,69 @@ fun OnlineSearchResult(
     LaunchedEffect(isSearchBarExpanded) {
         if (isSearchBarExpanded) {
             focusRequester.requestFocus()
+        }
+    }
+    
+    // Update suggestions when query changes
+    LaunchedEffect(query.text) {
+        snapshotFlow { query.text }.debounce(300L).collectLatest {
+            suggestionViewModel.query.value = it
+        }
+    }
+}
+
+@Composable
+fun SuggestionItem(
+    modifier: Modifier = Modifier,
+    query: String,
+    online: Boolean,
+    onClick: () -> Unit,
+    onDelete: () -> Unit = {},
+    onFillTextField: () -> Unit,
+    pureBlack: Boolean
+) {
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = modifier
+            .fillMaxWidth()
+            .height(SuggestionItemHeight)
+            .background(if (pureBlack) Color.Black else MaterialTheme.colorScheme.surface)
+            .clickable(onClick = onClick)
+            .windowInsetsPadding(WindowInsets.systemBars.only(WindowInsetsSides.Horizontal)),
+    ) {
+        Icon(
+            painterResource(if (online) R.drawable.search else R.drawable.history),
+            contentDescription = null,
+            modifier = Modifier.padding(horizontal = 16.dp).alpha(0.5f)
+        )
+
+        Text(
+            text = query,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.weight(1f),
+        )
+
+        if (!online) {
+            IconButton(
+                onClick = onDelete,
+                modifier = Modifier.alpha(0.5f),
+            ) {
+                Icon(
+                    painter = painterResource(R.drawable.close),
+                    contentDescription = null,
+                )
+            }
+        }
+
+        IconButton(
+            onClick = onFillTextField,
+            modifier = Modifier.alpha(0.5f),
+        ) {
+            Icon(
+                painter = painterResource(R.drawable.arrow_top_left),
+                contentDescription = null,
+            )
         }
     }
 }
