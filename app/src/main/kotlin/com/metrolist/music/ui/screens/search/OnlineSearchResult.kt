@@ -81,6 +81,7 @@ import com.metrolist.music.constants.AppBarHeight
 import com.metrolist.music.constants.SearchFilterHeight
 import com.metrolist.music.constants.MiniPlayerHeight
 import com.metrolist.music.constants.MiniPlayerBottomSpacing
+import com.metrolist.music.constants.NavigationBarHeight
 import com.metrolist.music.models.toMediaMetadata
 import com.metrolist.music.playback.queues.YouTubeQueue
 import com.metrolist.music.ui.component.ChipsRow
@@ -434,7 +435,7 @@ fun OnlineSearchResult(
                 }
 
                 item(key = "bottom_spacer") {
-                    Spacer(modifier = Modifier.height(MiniPlayerHeight + MiniPlayerBottomSpacing))
+                    Spacer(modifier = Modifier.height(MiniPlayerHeight + MiniPlayerBottomSpacing + NavigationBarHeight))
                 }
             }
         }
