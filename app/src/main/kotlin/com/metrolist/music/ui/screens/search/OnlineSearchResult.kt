@@ -11,53 +11,52 @@ import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.WindowInsetsSides
 import androidx.compose.foundation.layout.add
 import androidx.compose.foundation.layout.asPaddingValues
-import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.systemBars
+import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyItemScope
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
-import androidx.compose.foundation.text.KeyboardActions
-import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
+import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
+import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.TopAppBarDefaults
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.input.TextFieldValue
+import androidx.compose.ui.text.TextRange
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.focus.FocusRequester
-import androidx.compose.ui.focus.focusRequester
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
-import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.text.TextRange
-import androidx.compose.ui.text.input.ImeAction
-import androidx.compose.ui.text.input.TextFieldValue
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
@@ -77,6 +76,8 @@ import com.metrolist.innertube.models.WatchEndpoint
 import com.metrolist.innertube.models.YTItem
 import com.metrolist.music.LocalPlayerAwareWindowInsets
 import com.metrolist.music.LocalPlayerConnection
+import com.metrolist.music.constants.AppBarHeight
+import com.metrolist.music.constants.SearchFilterHeight
 import com.metrolist.music.models.toMediaMetadata
 import com.metrolist.music.playback.queues.YouTubeQueue
 import com.metrolist.music.ui.component.ChipsRow
@@ -112,7 +113,7 @@ fun OnlineSearchResult(
     val lazyListState = rememberLazyListState()
     val focusManager = LocalFocusManager.current
     val focusRequester = remember { FocusRequester() }
-    
+
     // Extract query from navigation arguments
     val encodedQuery = navController.currentBackStackEntry?.arguments?.getString("query") ?: ""
     val decodedQuery = remember(encodedQuery) {
@@ -122,13 +123,13 @@ fun OnlineSearchResult(
             encodedQuery
         }
     }
-    
+
     var query by rememberSaveable(stateSaver = TextFieldValue.Saver) {
         mutableStateOf(TextFieldValue(decodedQuery, TextRange(decodedQuery.length)))
     }
-    
+
     var isSearchBarExpanded by rememberSaveable { mutableStateOf(false) }
-    
+ 
     val onSearch: (String) -> Unit = remember {
         { searchQuery ->
             if (searchQuery.isNotEmpty()) {
@@ -142,7 +143,7 @@ fun OnlineSearchResult(
             }
         }
     }
-    
+
     // Update query when decodedQuery changes
     LaunchedEffect(decodedQuery) {
         query = TextFieldValue(decodedQuery, TextRange(decodedQuery.length))
@@ -249,47 +250,10 @@ fun OnlineSearchResult(
         )
     }
 
-    Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(if (pureBlack) Color.Black else MaterialTheme.colorScheme.background)
-            .windowInsetsPadding(WindowInsets.systemBars)
-    ) {
-        Column(
-            modifier = Modifier.fillMaxSize()
-        ) {
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .background(if (pureBlack) Color.Black else MaterialTheme.colorScheme.surfaceContainer)
-            ) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 16.dp)
-                        .padding(top = 8.dp, bottom = 8.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    IconButton(
-                        onClick = { 
-                            if (isSearchBarExpanded) {
-                                isSearchBarExpanded = false
-                                focusManager.clearFocus()
-                            } else {
-                                navController.navigateUp()
-                            }
-                        },
-                        modifier = Modifier.size(48.dp)
-                    ) {
-                        Icon(
-                            painter = painterResource(R.drawable.arrow_back),
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.onSurface
-                        )
-                    }
-                    
-                    Spacer(modifier = Modifier.width(8.dp))
-
+    Scaffold(
+        topBar = {
+            TopAppBar(
+                title = {
                     if (isSearchBarExpanded) {
                         OutlinedTextField(
                             value = query,
@@ -310,15 +274,11 @@ fun OnlineSearchResult(
                             trailingIcon = {
                                 Row {
                                     if (query.text.isNotEmpty()) {
-                                        IconButton(
-                                            onClick = { query = TextFieldValue("") },
-                                            modifier = Modifier.size(24.dp)
-                                        ) {
+                                        IconButton(onClick = { query = TextFieldValue("") }) {
                                             Icon(
                                                 painter = painterResource(R.drawable.close),
                                                 contentDescription = null,
-                                                tint = MaterialTheme.colorScheme.onSurface,
-                                                modifier = Modifier.size(20.dp)
+                                                tint = MaterialTheme.colorScheme.onSurface
                                             )
                                         }
                                     }
@@ -326,7 +286,7 @@ fun OnlineSearchResult(
                             },
                             singleLine = true,
                             modifier = Modifier
-                                .weight(1f)
+                                .fillMaxWidth()
                                 .focusRequester(focusRequester),
                             colors = OutlinedTextFieldDefaults.colors(
                                 focusedTextColor = MaterialTheme.colorScheme.onSurface,
@@ -345,31 +305,48 @@ fun OnlineSearchResult(
                     } else {
                         Row(
                             modifier = Modifier
-                                .weight(1f)
-                                .height(48.dp)
+                                .fillMaxWidth()
                                 .combinedClickable(
                                     onClick = { 
                                         isSearchBarExpanded = true
                                     }
                                 )
-                                .padding(vertical = 12.dp),
-                            verticalAlignment = Alignment.CenterVertically
                         ) {
                             Text(
                                 text = decodedQuery.ifEmpty { stringResource(R.string.search_yt_music) },
-                                style = MaterialTheme.typography.bodyLarge.copy(
-                                    fontSize = 16.sp,
-                                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
-                                ),
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis
+                                style = MaterialTheme.typography.titleLarge,
+                                color = MaterialTheme.colorScheme.onSurface,
+                                modifier = Modifier.weight(1f)
                             )
                         }
                     }
-                }
-            }
-            
-            // ChipsRow
+                },
+                navigationIcon = {
+                    IconButton(onClick = { 
+                        if (isSearchBarExpanded) {
+                            isSearchBarExpanded = false
+                            focusManager.clearFocus()
+                        } else {
+                            navController.navigateUp()
+                        }
+                    }) {
+                        Icon(
+                            painter = painterResource(R.drawable.arrow_back),
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.onSurface
+                        )
+                    }
+                },
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = if (pureBlack) Color.Black else MaterialTheme.colorScheme.surfaceContainer
+                )
+            )
+        },
+        containerColor = if (pureBlack) Color.Black else MaterialTheme.colorScheme.background
+    ) { paddingValues ->
+        Column(
+            modifier = Modifier.padding(paddingValues)
+        ) {
             ChipsRow(
                 chips = listOf(
                     null to stringResource(R.string.filter_all),
@@ -389,16 +366,11 @@ fun OnlineSearchResult(
                         lazyListState.animateScrollToItem(0)
                     }
                 },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(top = 8.dp)
+                modifier = Modifier.fillMaxWidth()
             )
 
             LazyColumn(
-                state = lazyListState,
-                modifier = Modifier
-                    .fillMaxSize()
-                    .weight(1f)
+                state = lazyListState
             ) {
                 if (searchFilter == null) {
                     searchSummary?.summaries?.forEach { summary ->
@@ -460,7 +432,7 @@ fun OnlineSearchResult(
             }
         }
     }
-    
+
     // Auto-focus when search bar is expanded
     LaunchedEffect(isSearchBarExpanded) {
         if (isSearchBarExpanded) {
