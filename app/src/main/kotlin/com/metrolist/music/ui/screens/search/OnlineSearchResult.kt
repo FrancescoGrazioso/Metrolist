@@ -434,10 +434,10 @@ fun OnlineSearchResult(
         }
     }
 
-    // Auto-focus when component loads
-    LaunchedEffect(Unit) {
-        focusRequester.requestFocus()
-    }
+    // Auto-focus removed to prevent keyboard from showing automatically
+    // LaunchedEffect(Unit) {
+    //     focusRequester.requestFocus()
+    // }
 }
 
 

@@ -162,7 +162,7 @@ fun SearchScreen(
                     IconButton(onClick = { navController.navigateUp() }) {
                         Icon(
                             painter = painterResource(R.drawable.arrow_back),
-                            contentDescription = null,
+                            contentDescription = stringResource(R.string.back),
                             tint = MaterialTheme.colorScheme.onSurface
                         )
                     }
@@ -202,7 +202,8 @@ fun SearchScreen(
         }
     }
 
-    LaunchedEffect(Unit) {
-        focusRequester.requestFocus()
-    }
+    // Auto-focus removed to prevent keyboard from showing automatically
+    // LaunchedEffect(Unit) {
+    //     focusRequester.requestFocus()
+    // }
 }
