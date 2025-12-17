@@ -32,8 +32,6 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.SearchBar
-import androidx.compose.material3.SearchBarDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
@@ -69,7 +67,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.navigation.NavController
-import com.metrolist.music.LocalDatabase
+
 import com.metrolist.music.LocalPlayerConnection
 import com.metrolist.music.R
 import com.metrolist.music.models.toMediaMetadata
@@ -79,12 +77,7 @@ import com.metrolist.music.ui.menu.YouTubeAlbumMenu
 import com.metrolist.music.ui.menu.YouTubeArtistMenu
 import com.metrolist.music.ui.menu.YouTubePlaylistMenu
 import com.metrolist.music.ui.menu.YouTubeSongMenu
-import com.metrolist.music.constants.SuggestionItemHeight
-import com.metrolist.music.viewmodels.OnlineSearchSuggestionViewModel
-import kotlinx.coroutines.FlowPreview
-import kotlinx.coroutines.flow.collectLatest
-import kotlinx.coroutines.flow.debounce
-import kotlinx.coroutines.flow.drop
+
 import com.metrolist.innertube.YouTube.SearchFilter.Companion.FILTER_ALBUM
 import com.metrolist.innertube.YouTube.SearchFilter.Companion.FILTER_ARTIST
 import com.metrolist.innertube.YouTube.SearchFilter.Companion.FILTER_COMMUNITY_PLAYLIST
@@ -127,7 +120,6 @@ import java.net.URLEncoder
 fun OnlineSearchResult(
     navController: NavController,
     viewModel: OnlineSearchViewModel = hiltViewModel(),
-    suggestionViewModel: OnlineSearchSuggestionViewModel = hiltViewModel(),
     pureBlack: Boolean = false
 ) {
     val menuState = LocalMenuState.current
@@ -155,13 +147,12 @@ fun OnlineSearchResult(
         mutableStateOf(TextFieldValue(decodedQuery, TextRange(decodedQuery.length)))
     }
 
-    var isSearchBarExpanded by rememberSaveable { mutableStateOf(false) }
+
  
     val onSearch: (String) -> Unit = remember {
         { searchQuery ->
             if (searchQuery.isNotEmpty()) {
                 focusManager.clearFocus()
-                isSearchBarExpanded = false
                 navController.navigate("search/${URLEncoder.encode(searchQuery, "UTF-8")}") {
                     popUpTo("search/${URLEncoder.encode(decodedQuery, "UTF-8")}") {
                         inclusive = true
@@ -187,8 +178,7 @@ fun OnlineSearchResult(
     }
     
     // Suggestion states
-    val suggestionViewState by suggestionViewModel.viewState.collectAsState()
-    val database = LocalDatabase.current
+
 
     LaunchedEffect(lazyListState) {
         snapshotFlow {
@@ -288,250 +278,72 @@ fun OnlineSearchResult(
             .windowInsetsPadding(WindowInsets.systemBars.only(WindowInsetsSides.Top))
     ) {
         // Google-style SearchBar with Material 3 design
-        SearchBar(
-            inputField = {
-                SearchBarDefaults.InputField(
-                    query = query.text,
-                    onQueryChange = { newQuery ->
-                        query = TextFieldValue(newQuery, TextRange(newQuery.length))
-                    },
-                    onSearch = { searchQuery ->
-                        onSearch(searchQuery)
-                    },
-                    expanded = isSearchBarExpanded,
-                    onExpandedChange = { expanded ->
-                        isSearchBarExpanded = expanded
-                        if (expanded) {
-                            coroutineScope.launch {
-                                focusRequester.requestFocus()
-                            }
-                        } else {
-                            focusManager.clearFocus()
-                        }
-                    },
-                    placeholder = {
-                        Text(
-                            text = stringResource(R.string.search_yt_music),
-                            style = MaterialTheme.typography.bodyLarge,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    },
-                    leadingIcon = {
-                        IconButton(
-                            onClick = {
-                                if (isSearchBarExpanded) {
-                                    isSearchBarExpanded = false
-                                    focusManager.clearFocus()
-                                } else {
-                                    navController.navigateUp()
-                                }
-                            }
-                        ) {
-                            Icon(
-                                painter = painterResource(
-                                    if (isSearchBarExpanded) R.drawable.arrow_back else R.drawable.search
-                                ),
-                                contentDescription = null,
-                                tint = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
-                    },
-                    trailingIcon = {
-                        if (query.text.isNotEmpty()) {
-                            IconButton(
-                                onClick = {
-                                    query = TextFieldValue("")
-                                }
-                            ) {
-                                Icon(
-                                    painter = painterResource(R.drawable.close),
-                                    contentDescription = null,
-                                    tint = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                            }
-                        }
-                    },
-                    modifier = Modifier.focusRequester(focusRequester)
+        OutlinedTextField(
+            value = query,
+            onValueChange = { newQuery ->
+                query = newQuery
+            },
+            placeholder = {
+                Text(
+                    text = stringResource(R.string.search_yt_music),
+                    style = MaterialTheme.typography.bodyLarge,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             },
-            expanded = isSearchBarExpanded,
-            onExpandedChange = { expanded ->
-                isSearchBarExpanded = expanded
-                if (!expanded) {
-                    focusManager.clearFocus()
+            leadingIcon = {
+                Icon(
+                    painter = painterResource(R.drawable.search),
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            },
+            trailingIcon = {
+                if (query.text.isNotEmpty()) {
+                    IconButton(
+                        onClick = {
+                            query = TextFieldValue("")
+                        }
+                    ) {
+                        Icon(
+                            painter = painterResource(R.drawable.close),
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
                 }
             },
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 8.dp),
+            keyboardOptions = KeyboardOptions(
+                imeAction = ImeAction.Search
+            ),
+            keyboardActions = KeyboardActions(
+                onSearch = { 
+                    onSearch(query.text)
+                }
+            ),
+            singleLine = true,
             shape = RoundedCornerShape(28.dp),
-            colors = SearchBarDefaults.colors(
-                containerColor = if (pureBlack) 
+            colors = OutlinedTextFieldDefaults.colors(
+                focusedContainerColor = if (pureBlack) 
                     MaterialTheme.colorScheme.surface 
                 else 
                     MaterialTheme.colorScheme.surfaceContainerHigh,
-                dividerColor = Color.Transparent
+                unfocusedContainerColor = if (pureBlack) 
+                    MaterialTheme.colorScheme.surface 
+                else 
+                    MaterialTheme.colorScheme.surfaceContainerHigh,
+                focusedBorderColor = Color.Transparent,
+                unfocusedBorderColor = Color.Transparent
             ),
-            tonalElevation = 6.dp,
-            shadowElevation = 0.dp
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 8.dp)
+                .focusRequester(focusRequester)
+        )
+
+        // Main content area below search bar
+        Column(
+            modifier = Modifier.fillMaxWidth()
         ) {
-            // Real search suggestions content using ViewModel
-            if (isSearchBarExpanded) {
-                LazyColumn(
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    // Search history items
-                    items(suggestionViewState.history, key = { "history_${it.query}" }) { history ->
-                        SuggestionItem(
-                            query = history.query,
-                            online = false,
-                            onClick = {
-                                onSearch(history.query)
-                                isSearchBarExpanded = false
-                            },
-                            onDelete = {
-                                database.query {
-                                    delete(history)
-                                }
-                            },
-                            onFillTextField = {
-                                query = TextFieldValue(history.query, TextRange(history.query.length))
-                            },
-                            pureBlack = pureBlack
-                        )
-                    }
-
-                    // Online suggestions
-                    items(suggestionViewState.suggestions, key = { "suggestion_$it" }) { suggestion ->
-                        SuggestionItem(
-                            query = suggestion,
-                            online = true,
-                            onClick = {
-                                onSearch(suggestion)
-                                isSearchBarExpanded = false
-                            },
-                            onFillTextField = {
-                                query = TextFieldValue(suggestion, TextRange(suggestion.length))
-                            },
-                            pureBlack = pureBlack
-                        )
-                    }
-
-                    // Recommended items from YouTube
-                    if (suggestionViewState.items.isNotEmpty() && suggestionViewState.history.size + suggestionViewState.suggestions.size > 0) {
-                        item(key = "search_divider") {
-                            HorizontalDivider()
-                        }
-                    }
-
-                    items(suggestionViewState.items, key = { "item_${it.id}" }) { item ->
-                        YouTubeListItem(
-                            item = item,
-                            isActive = when (item) {
-                                is SongItem -> mediaMetadata?.id == item.id
-                                is AlbumItem -> mediaMetadata?.album?.id == item.id
-                                else -> false
-                            },
-                            isPlaying = isPlaying,
-                            trailingContent = {
-                                IconButton(
-                                    onClick = {
-                                        menuState.show {
-                                            when (item) {
-                                                is SongItem -> YouTubeSongMenu(
-                                                    song = item,
-                                                    navController = navController,
-                                                    onDismiss = menuState::dismiss
-                                                )
-                                                is AlbumItem -> YouTubeAlbumMenu(
-                                                    albumItem = item,
-                                                    navController = navController,
-                                                    onDismiss = menuState::dismiss
-                                                )
-                                                is ArtistItem -> YouTubeArtistMenu(
-                                                    artist = item,
-                                                    onDismiss = menuState::dismiss
-                                                )
-                                                is PlaylistItem -> YouTubePlaylistMenu(
-                                                    playlist = item,
-                                                    coroutineScope = coroutineScope,
-                                                    onDismiss = menuState::dismiss
-                                                )
-                                            }
-                                        }
-                                    }
-                                ) {
-                                    Icon(
-                                        painter = painterResource(R.drawable.more_vert),
-                                        contentDescription = null
-                                    )
-                                }
-                            },
-                            modifier = Modifier.combinedClickable(
-                                onClick = {
-                                    when (item) {
-                                        is SongItem -> {
-                                            if (item.id == mediaMetadata?.id) {
-                                                playerConnection.togglePlayPause()
-                                            } else {
-                                                playerConnection.playQueue(
-                                                    YouTubeQueue.radio(item.toMediaMetadata())
-                                                )
-                                                isSearchBarExpanded = false
-                                            }
-                                        }
-                                        is AlbumItem -> {
-                                            navController.navigate("album/${item.id}")
-                                            isSearchBarExpanded = false
-                                        }
-                                        is ArtistItem -> {
-                                            navController.navigate("artist/${item.id}")
-                                            isSearchBarExpanded = false
-                                        }
-                                        is PlaylistItem -> {
-                                            navController.navigate("online_playlist/${item.id}")
-                                            isSearchBarExpanded = false
-                                        }
-                                    }
-                                },
-                                onLongClick = {
-                                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                                    menuState.show {
-                                        when (item) {
-                                            is SongItem -> YouTubeSongMenu(
-                                                song = item,
-                                                navController = navController,
-                                                onDismiss = menuState::dismiss
-                                            )
-                                            is AlbumItem -> YouTubeAlbumMenu(
-                                                albumItem = item,
-                                                navController = navController,
-                                                onDismiss = menuState::dismiss
-                                            )
-                                            is ArtistItem -> YouTubeArtistMenu(
-                                                artist = item,
-                                                onDismiss = menuState::dismiss
-                                            )
-                                            is PlaylistItem -> YouTubePlaylistMenu(
-                                                playlist = item,
-                                                coroutineScope = coroutineScope,
-                                                onDismiss = menuState::dismiss
-                                            )
-                                        }
-                                    }
-                                }
-                            )
-                        )
-                    }
-                }
-            }
-        }
-
-        // Main content area below search bar (only show when search bar is not expanded)
-        if (!isSearchBarExpanded) {
-            Column(
-                modifier = Modifier.fillMaxWidth()
-            ) {
             ChipsRow(
                 chips = listOf(
                     null to stringResource(R.string.filter_all),
@@ -624,73 +436,12 @@ fun OnlineSearchResult(
         }
     }
 
-    // Auto-focus when search bar is expanded
-    LaunchedEffect(isSearchBarExpanded) {
-        if (isSearchBarExpanded) {
-            focusRequester.requestFocus()
-        }
+    // Auto-focus when component loads
+    LaunchedEffect(Unit) {
+        focusRequester.requestFocus()
     }
     
-    // Update suggestions when query changes
-    LaunchedEffect(query.text) {
-        snapshotFlow { query.text }.debounce(300L).collectLatest {
-            suggestionViewModel.query.value = it
-        }
-    }
+
 }
 
-@Composable
-fun SuggestionItem(
-    modifier: Modifier = Modifier,
-    query: String,
-    online: Boolean,
-    onClick: () -> Unit,
-    onDelete: () -> Unit = {},
-    onFillTextField: () -> Unit,
-    pureBlack: Boolean
-) {
-    Row(
-        verticalAlignment = Alignment.CenterVertically,
-        modifier = modifier
-            .fillMaxWidth()
-            .height(SuggestionItemHeight)
-            .background(if (pureBlack) Color.Black else MaterialTheme.colorScheme.surface)
-            .clickable(onClick = onClick)
-            .windowInsetsPadding(WindowInsets.systemBars.only(WindowInsetsSides.Horizontal)),
-    ) {
-        Icon(
-            painterResource(if (online) R.drawable.search else R.drawable.history),
-            contentDescription = null,
-            modifier = Modifier.padding(horizontal = 16.dp).alpha(0.5f)
-        )
 
-        Text(
-            text = query,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-            modifier = Modifier.weight(1f),
-        )
-
-        if (!online) {
-            IconButton(
-                onClick = onDelete,
-                modifier = Modifier.alpha(0.5f),
-            ) {
-                Icon(
-                    painter = painterResource(R.drawable.close),
-                    contentDescription = null,
-                )
-            }
-        }
-
-        IconButton(
-            onClick = onFillTextField,
-            modifier = Modifier.alpha(0.5f),
-        ) {
-            Icon(
-                painter = painterResource(R.drawable.arrow_top_left),
-                contentDescription = null,
-            )
-        }
-    }
-}
