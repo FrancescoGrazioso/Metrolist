@@ -81,7 +81,7 @@ import androidx.navigation.NavController
 import coil3.compose.AsyncImage
 import coil3.request.ImageRequest
 import androidx.compose.ui.platform.LocalContext
-import com.metrolist.innertube.models.PlaylistPage
+import com.metrolist.innertube.pages.PlaylistPage
 import com.metrolist.innertube.models.SongItem
 import com.metrolist.innertube.models.WatchEndpoint
 import com.metrolist.music.LocalDatabase
@@ -300,7 +300,7 @@ fun OnlinePlaylistScreen(
                                             } else {
                                                 playerConnection.playQueue(
                                                     ListQueue(
-                                                        title = playlist.playlist.title,
+                                                        title = playlist.title,
                                                         items = filteredSongs.map { it.second.toMediaItem() },
                                                         startIndex = index
                                                     )
@@ -547,7 +547,7 @@ private fun OnlinePlaylistHeader(
             ) {
                 AsyncImage(
                     model = ImageRequest.Builder(LocalContext.current)
-                        .data(playlist.playlist.thumbnail)
+                        .data(playlist.thumbnail)
                         .build(),
                     contentDescription = null,
                     placeholder = painterResource(R.drawable.queue_music),
@@ -560,7 +560,7 @@ private fun OnlinePlaylistHeader(
 
         // Playlist Name
         Text(
-            text = playlist.playlist.title,
+            text = playlist.title,
             style = MaterialTheme.typography.headlineSmall,
             fontWeight = FontWeight.Bold,
             textAlign = androidx.compose.ui.text.style.TextAlign.Center,
@@ -570,7 +570,7 @@ private fun OnlinePlaylistHeader(
         )
 
         // Author
-        playlist.playlist.author?.let { artist ->
+        playlist.author?.let { artist ->
             Spacer(modifier = Modifier.height(8.dp))
             Text(
                 buildAnnotatedString {
@@ -601,7 +601,7 @@ private fun OnlinePlaylistHeader(
         Spacer(modifier = Modifier.height(16.dp))
 
         // Metadata Row - Song Count
-        playlist.playlist.songCountText?.let { songCountText ->
+        playlist.songCountText?.let { songCountText ->
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -627,19 +627,19 @@ private fun OnlinePlaylistHeader(
             verticalAlignment = Alignment.CenterVertically
         ) {
             // Like Button (if not LM playlist)
-            if (playlist.playlist.id != "LM") {
+            if (playlist.id != "LM") {
                 androidx.compose.material3.Surface(
                     onClick = {
                         if (dbPlaylist?.playlist == null) {
                             database.transaction {
                                 val playlistEntity = PlaylistEntity(
-                                    name = playlist.playlist.title,
-                                    browseId = playlist.playlist.id,
-                                    thumbnailUrl = playlist.playlist.thumbnail,
-                                    isEditable = playlist.playlist.isEditable,
-                                    playEndpointParams = playlist.playlist.playEndpoint?.params,
-                                    shuffleEndpointParams = playlist.playlist.shuffleEndpoint?.params,
-                                    radioEndpointParams = playlist.playlist.radioEndpoint?.params
+                                    name = playlist.title,
+                                    browseId = playlist.id,
+                                    thumbnailUrl = playlist.thumbnail,
+                                    isEditable = playlist.isEditable,
+                                    playEndpointParams = playlist.playEndpoint?.params,
+                                    shuffleEndpointParams = playlist.shuffleEndpoint?.params,
+                                    radioEndpointParams = playlist.radioEndpoint?.params
                                 ).toggleLike()
                                 insert(playlistEntity)
                                 songs.map(SongItem::toMediaMetadata)
@@ -657,8 +657,8 @@ private fun OnlinePlaylistHeader(
                             database.transaction {
                                 val currentPlaylist = dbPlaylist!!.playlist
                                 update(currentPlaylist.copy(
-                                    name = playlist.playlist.title,
-                                    thumbnailUrl = playlist.playlist.thumbnail
+                                    name = playlist.title,
+                                    thumbnailUrl = playlist.thumbnail
                                 ))
                                 update(currentPlaylist.toggleLike())
                             }
@@ -693,7 +693,7 @@ private fun OnlinePlaylistHeader(
                     onClick = {
                         playerConnection.playQueue(
                             ListQueue(
-                                title = playlist.playlist.title,
+                                title = playlist.title,
                                 items = songs.map { it.toMediaItem() },
                             )
                         )
@@ -712,13 +712,13 @@ private fun OnlinePlaylistHeader(
             }
 
             // Shuffle Button
-            playlist.playlist.shuffleEndpoint?.let {
+            playlist.shuffleEndpoint?.let {
                 Button(
                     onClick = {
                         val shuffledSongs = songs.map { it.toMediaItem() }.shuffled()
                         playerConnection.playQueue(
                             ListQueue(
-                                title = playlist.playlist.title,
+                                title = playlist.title,
                                 items = shuffledSongs,
                             )
                         )
