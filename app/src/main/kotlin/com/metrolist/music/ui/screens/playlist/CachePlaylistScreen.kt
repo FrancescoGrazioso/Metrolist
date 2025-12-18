@@ -195,6 +195,7 @@ fun CachePlaylistScreen(
                     item(key = "playlist_header") {
                         CachePlaylistHeader(
                             songs = filteredSongs,
+                            context = context,
                             modifier = Modifier.animateItem()
                         )
                     }
@@ -417,6 +418,7 @@ fun CachePlaylistScreen(
 @Composable
 private fun CachePlaylistHeader(
     songs: List<ItemWrapper<Song>>,
+    context: android.content.Context,
     modifier: Modifier = Modifier
 ) {
     val playerConnection = LocalPlayerConnection.current ?: return
