@@ -705,7 +705,10 @@ fun AlbumScreen(
                         onClick = {
                             menuState.show {
                                 AlbumMenu(
-                                    originalAlbum = album.album,
+                                    originalAlbum = Album(
+                                        album.album,
+                                        album.artists
+                                    ),
                                     navController = navController,
                                     onDismiss = menuState::dismiss
                                 )
