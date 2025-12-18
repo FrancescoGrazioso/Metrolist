@@ -11,7 +11,6 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
-import kotlinx.coroutines.launch
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -40,7 +39,7 @@ import androidx.navigation.NavController
 import coil3.compose.AsyncImage
 import coil3.request.ImageRequest
 import com.metrolist.innertube.models.SongItem
-import com.metrolist.innertube.pages.PlaylistPage
+import com.metrolist.innertube.models.PlaylistItem
 import com.metrolist.music.*
 import com.metrolist.music.R
 import com.metrolist.music.db.entities.Playlist
@@ -68,6 +67,7 @@ fun OnlinePlaylistScreen(
     val database = LocalDatabase.current
     val haptic = LocalHapticFeedback.current
     val playerConnection = LocalPlayerConnection.current ?: return
+    val coroutineScope = rememberCoroutineScope()
 
     val isPlaying by playerConnection.isEffectivelyPlaying.collectAsState()
     val mediaMetadata by playerConnection.mediaMetadata.collectAsState()
@@ -117,10 +117,11 @@ fun OnlinePlaylistScreen(
                 if (!isSearching) {
                     item(key = "playlist_header") {
                         OnlinePlaylistHeader(
-                            playlist = PlaylistPage(playlist = playlist, songs = songs),
+                            playlist = playlist,
                             songs = songs,
                             dbPlaylist = dbPlaylist,
                             navController = navController,
+                            coroutineScope = coroutineScope,
                             modifier = Modifier.animateItem()
                         )
                     }
@@ -187,10 +188,11 @@ fun OnlinePlaylistScreen(
 
 @Composable
 private fun OnlinePlaylistHeader(
-    playlist: PlaylistPage,
+    playlist: PlaylistItem,
     songs: List<SongItem>,
     dbPlaylist: Playlist?,
     navController: NavController,
+    coroutineScope: CoroutineScope,
     modifier: Modifier = Modifier
 ) {
     val playerConnection = LocalPlayerConnection.current ?: return
@@ -207,7 +209,7 @@ private fun OnlinePlaylistHeader(
             shadowElevation = 24.dp
         ) {
             AsyncImage(
-                model = ImageRequest.Builder(LocalContext.current).data(playlist.playlist.thumbnail).build(),
+                model = ImageRequest.Builder(LocalContext.current).data(playlist.thumbnail).build(),
                 contentDescription = null,
                 contentScale = ContentScale.Crop
             )
@@ -216,7 +218,7 @@ private fun OnlinePlaylistHeader(
         Spacer(Modifier.height(16.dp))
 
         Text(
-            playlist.playlist.title,
+            playlist.title,
             style = MaterialTheme.typography.headlineSmall,
             fontWeight = FontWeight.Bold,
             textAlign = TextAlign.Center,
@@ -229,7 +231,7 @@ private fun OnlinePlaylistHeader(
         Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
             if (songs.isNotEmpty()) {
                 Button(onClick = {
-                    playerConnection.playQueue(ListQueue(playlist.playlist.title, songs.map { it.toMediaItem() }))
+                    playerConnection.playQueue(ListQueue(playlist.title, songs.map { it.toMediaItem() }))
                 }) {
                     Icon(painterResource(R.drawable.play), null)
                 }
@@ -237,7 +239,7 @@ private fun OnlinePlaylistHeader(
 
             Button(onClick = {
                 playerConnection.playQueue(
-                    ListQueue(playlist.playlist.title, songs.map { it.toMediaItem() }.shuffled())
+                    ListQueue(playlist.title, songs.map { it.toMediaItem() }.shuffled())
                 )
             }) {
                 Icon(painterResource(R.drawable.shuffle), null)
@@ -245,7 +247,12 @@ private fun OnlinePlaylistHeader(
 
             IconButton(onClick = {
                 menuState.show {
-                    YouTubePlaylistMenu(playlist, songs, rememberCoroutineScope(), menuState::dismiss)
+                    YouTubePlaylistMenu(
+                        playlist = playlist,
+                        songs = songs,
+                        coroutineScope = coroutineScope,
+                        onDismiss = menuState::dismiss
+                    )
                 }
             }) {
                 Icon(painterResource(R.drawable.more_vert), null)
