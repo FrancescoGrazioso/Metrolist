@@ -11,6 +11,7 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import kotlinx.coroutines.launch
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -32,6 +33,8 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.util.fastAny
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.ui.layout.ContentScale
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.navigation.NavController
 import coil3.compose.AsyncImage
@@ -39,6 +42,7 @@ import coil3.request.ImageRequest
 import com.metrolist.innertube.models.SongItem
 import com.metrolist.innertube.pages.PlaylistPage
 import com.metrolist.music.*
+import com.metrolist.music.R
 import com.metrolist.music.db.entities.Playlist
 import com.metrolist.music.db.entities.PlaylistEntity
 import com.metrolist.music.db.entities.PlaylistSongMap
@@ -50,6 +54,7 @@ import com.metrolist.music.ui.menu.*
 import com.metrolist.music.ui.utils.ItemWrapper
 import com.metrolist.music.ui.utils.backToMain
 import com.metrolist.music.utils.rememberPreference
+import com.metrolist.music.constants.HideExplicitKey
 import com.metrolist.music.viewmodels.OnlinePlaylistViewModel
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
@@ -112,7 +117,7 @@ fun OnlinePlaylistScreen(
                 if (!isSearching) {
                     item(key = "playlist_header") {
                         OnlinePlaylistHeader(
-                            playlist = playlist,
+                            playlist = PlaylistPage(playlist = playlist, songs = songs),
                             songs = songs,
                             dbPlaylist = dbPlaylist,
                             navController = navController,
@@ -202,7 +207,7 @@ private fun OnlinePlaylistHeader(
             shadowElevation = 24.dp
         ) {
             AsyncImage(
-                model = ImageRequest.Builder(LocalContext.current).data(playlist.thumbnail).build(),
+                model = ImageRequest.Builder(LocalContext.current).data(playlist.playlist.thumbnail).build(),
                 contentDescription = null,
                 contentScale = ContentScale.Crop
             )
@@ -211,7 +216,7 @@ private fun OnlinePlaylistHeader(
         Spacer(Modifier.height(16.dp))
 
         Text(
-            playlist.title,
+            playlist.playlist.title,
             style = MaterialTheme.typography.headlineSmall,
             fontWeight = FontWeight.Bold,
             textAlign = TextAlign.Center,
@@ -224,7 +229,7 @@ private fun OnlinePlaylistHeader(
         Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
             if (songs.isNotEmpty()) {
                 Button(onClick = {
-                    playerConnection.playQueue(ListQueue(playlist.title, songs.map { it.toMediaItem() }))
+                    playerConnection.playQueue(ListQueue(playlist.playlist.title, songs.map { it.toMediaItem() }))
                 }) {
                     Icon(painterResource(R.drawable.play), null)
                 }
@@ -232,7 +237,7 @@ private fun OnlinePlaylistHeader(
 
             Button(onClick = {
                 playerConnection.playQueue(
-                    ListQueue(playlist.title, songs.map { it.toMediaItem() }.shuffled())
+                    ListQueue(playlist.playlist.title, songs.map { it.toMediaItem() }.shuffled())
                 )
             }) {
                 Icon(painterResource(R.drawable.shuffle), null)
