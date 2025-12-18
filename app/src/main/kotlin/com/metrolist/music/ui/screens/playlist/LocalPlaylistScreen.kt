@@ -1218,8 +1218,7 @@ fun LocalPlaylistHeader(
                                     } else {
                                         showEditNoteDialog = true
                                     }
-                                },
-                                alignment = Alignment.BottomEnd
+                                }
                             )
                         }
                     }
@@ -1298,8 +1297,7 @@ fun LocalPlaylistHeader(
                                     } else {
                                         showEditNoteDialog = true
                                     }
-                                },
-                                alignment = Alignment.BottomEnd
+                                }
                             )
                         }
                     }

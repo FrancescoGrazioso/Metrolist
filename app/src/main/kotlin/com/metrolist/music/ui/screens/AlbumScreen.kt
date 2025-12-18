@@ -99,7 +99,7 @@ import com.metrolist.music.ui.component.SongListItem
 import com.metrolist.music.ui.component.YouTubeGridItem
 import com.metrolist.music.ui.component.shimmer.ButtonPlaceholder
 import com.metrolist.music.ui.component.shimmer.ListItemPlaceHolder
-import com.metrolist.music.ui.component.shimmer.ShimmerHost
+
 import com.metrolist.music.ui.component.shimmer.TextPlaceholder
 import com.metrolist.music.ui.menu.AlbumMenu
 import com.metrolist.music.ui.menu.SelectionSongMenu
@@ -577,15 +577,14 @@ fun AlbumScreen(
                 }
             }
         } else {
-            item(key = "loading_shimmer") {
-                ShimmerHost(
-                    modifier = Modifier.animateItem()
+            item(key = "loading") {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(32.dp),
+                    contentAlignment = Alignment.Center
                 ) {
-                    AlbumHeaderPlaceholder()
-
-                    repeat(6) {
-                        ListItemPlaceHolder()
-                    }
+                    CircularProgressIndicator()
                 }
             }
         }
@@ -696,105 +695,4 @@ fun AlbumScreen(
     )
 }
 
-@Composable
-private fun AlbumHeaderPlaceholder() {
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(top = 8.dp, bottom = 20.dp),
-        horizontalAlignment = Alignment.CenterHorizontally
-    ) {
-        // Large centered thumbnail placeholder with shadow
-        Box(
-            modifier = Modifier.padding(top = 8.dp, bottom = 20.dp)
-        ) {
-            androidx.compose.material3.Surface(
-                modifier = Modifier
-                    .size(240.dp)
-                    .shadow(
-                        elevation = 24.dp,
-                        shape = RoundedCornerShape(16.dp),
-                        spotColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.3f)
-                    ),
-                shape = RoundedCornerShape(16.dp),
-                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.12f)
-            ) {}
-        }
 
-        // Title placeholder
-        Spacer(
-            modifier = Modifier
-                .height(24.dp)
-                .fillMaxWidth(0.6f)
-                .clip(RoundedCornerShape(12.dp))
-                .background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.12f))
-        )
-
-        Spacer(modifier = Modifier.height(8.dp))
-
-        // Artist placeholder
-        Spacer(
-            modifier = Modifier
-                .height(16.dp)
-                .fillMaxWidth(0.4f)
-                .clip(RoundedCornerShape(8.dp))
-                .background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.12f))
-        )
-
-        Spacer(modifier = Modifier.height(16.dp))
-
-        // Metadata chip placeholder
-        Spacer(
-            modifier = Modifier
-                .height(32.dp)
-                .width(120.dp)
-                .clip(RoundedCornerShape(20.dp))
-                .background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.12f))
-        )
-
-        Spacer(modifier = Modifier.height(24.dp))
-
-        // Action buttons row placeholder
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 24.dp),
-            horizontalArrangement = Arrangement.spacedBy(12.dp, Alignment.CenterHorizontally),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            // Like button placeholder
-            Spacer(
-                modifier = Modifier
-                    .size(48.dp)
-                    .clip(androidx.compose.foundation.shape.CircleShape)
-                    .background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.12f))
-            )
-
-            // Play button placeholder
-            Spacer(
-                modifier = Modifier
-                    .weight(1f)
-                    .height(48.dp)
-                    .clip(RoundedCornerShape(24.dp))
-                    .background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.12f))
-            )
-
-            // Shuffle button placeholder
-            Spacer(
-                modifier = Modifier
-                    .weight(1f)
-                    .height(48.dp)
-                    .clip(RoundedCornerShape(24.dp))
-                    .background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.12f))
-            )
-
-            // More button placeholder
-            Spacer(
-                modifier = Modifier
-                    .size(48.dp)
-                    .clip(androidx.compose.foundation.shape.CircleShape)
-                    .background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.12f))
-            )
-        }
-    }
-}
