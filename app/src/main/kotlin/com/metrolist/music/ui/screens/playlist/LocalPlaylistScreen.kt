@@ -895,7 +895,7 @@ fun LocalPlaylistScreen(
                         )
                     }
 
-                    IconButton(
+                    Surface(
                         onClick = {
                             menuState.show {
                                 SelectionSongMenu(
@@ -911,11 +911,20 @@ fun LocalPlaylistScreen(
                                 )
                             }
                         },
+                        shape = CircleShape,
+                        color = MaterialTheme.colorScheme.surfaceVariant,
+                        modifier = Modifier.size(40.dp)
                     ) {
-                        Icon(
-                            painter = painterResource(R.drawable.more_vert),
-                            contentDescription = null
-                        )
+                        Box(
+                            modifier = Modifier.fillMaxSize(),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                painter = painterResource(R.drawable.more_vert),
+                                contentDescription = null,
+                                modifier = Modifier.size(20.dp)
+                            )
+                        }
                     }
                 } else if (!isSearching) {
                     // Secondary action buttons (edit, sync, queue)
@@ -923,18 +932,27 @@ fun LocalPlaylistScreen(
                         val editable = playlistData.playlist.isEditable
                         
                         if (editable) {
-                            IconButton(
-                                onClick = { showEditDialog = true }
+                            Surface(
+                                onClick = { showEditDialog = true },
+                                shape = CircleShape,
+                                color = MaterialTheme.colorScheme.surfaceVariant,
+                                modifier = Modifier.size(40.dp)
                             ) {
-                                Icon(
-                                    painter = painterResource(R.drawable.edit),
-                                    contentDescription = null
-                                )
+                                Box(
+                                    modifier = Modifier.fillMaxSize(),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Icon(
+                                        painter = painterResource(R.drawable.edit),
+                                        contentDescription = null,
+                                        modifier = Modifier.size(20.dp)
+                                    )
+                                }
                             }
                         }
                         
                         if (playlistData.playlist.browseId != null) {
-                            IconButton(
+                            Surface(
                                 onClick = {
                                     coroutineScope.launch(Dispatchers.IO) {
                                         val playlistPage = YouTube.playlist(playlistData.playlist.browseId)
@@ -959,36 +977,63 @@ fun LocalPlaylistScreen(
                                     coroutineScope.launch(Dispatchers.Main) {
                                         snackbarHostState.showSnackbar(context.getString(R.string.playlist_synced))
                                     }
-                                }
+                                },
+                                shape = CircleShape,
+                                color = MaterialTheme.colorScheme.surfaceVariant,
+                                modifier = Modifier.size(40.dp)
                             ) {
-                                Icon(
-                                    painter = painterResource(R.drawable.sync),
-                                    contentDescription = null
-                                )
+                                Box(
+                                    modifier = Modifier.fillMaxSize(),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Icon(
+                                        painter = painterResource(R.drawable.sync),
+                                        contentDescription = null,
+                                        modifier = Modifier.size(20.dp)
+                                    )
+                                }
                             }
                         }
                         
-                        IconButton(
+                        Surface(
                             onClick = {
                                 playerConnection.addToQueue(
                                     items = songs.map { it.song.toMediaItem() },
                                 )
-                            }
+                            },
+                            shape = CircleShape,
+                            color = MaterialTheme.colorScheme.surfaceVariant,
+                            modifier = Modifier.size(40.dp)
                         ) {
-                            Icon(
-                                painter = painterResource(R.drawable.queue_music),
-                                contentDescription = null
-                            )
+                            Box(
+                                modifier = Modifier.fillMaxSize(),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(
+                                    painter = painterResource(R.drawable.queue_music),
+                                    contentDescription = null,
+                                    modifier = Modifier.size(20.dp)
+                                )
+                            }
                         }
                     }
                     
-                    IconButton(
-                        onClick = { isSearching = true }
+                    Surface(
+                        onClick = { isSearching = true },
+                        shape = CircleShape,
+                        color = MaterialTheme.colorScheme.surfaceVariant,
+                        modifier = Modifier.size(40.dp)
                     ) {
-                        Icon(
-                            painter = painterResource(R.drawable.search),
-                            contentDescription = null
-                        )
+                        Box(
+                            modifier = Modifier.fillMaxSize(),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                painter = painterResource(R.drawable.search),
+                                contentDescription = null,
+                                modifier = Modifier.size(20.dp)
+                            )
+                        }
                     }
                 }
             }
