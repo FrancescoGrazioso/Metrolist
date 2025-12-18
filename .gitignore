@@ -98,5 +98,4 @@ core.*
 *.so
 *.bin
 
-# Android SDK
-android-sdk/
+
