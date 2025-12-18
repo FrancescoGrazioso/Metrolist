@@ -9,6 +9,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import kotlinx.coroutines.CoroutineScope
@@ -54,8 +55,41 @@ import com.metrolist.music.ui.menu.*
 import com.metrolist.music.ui.utils.ItemWrapper
 import com.metrolist.music.ui.utils.backToMain
 import com.metrolist.music.utils.rememberPreference
+import com.metrolist.music.utils.makeTimeString
 import com.metrolist.music.constants.HideExplicitKey
 import com.metrolist.music.viewmodels.OnlinePlaylistViewModel
+
+@Composable
+private fun MetadataChip(
+    icon: Int,
+    text: String,
+    modifier: Modifier = Modifier
+) {
+    Surface(
+        modifier = modifier,
+        shape = RoundedCornerShape(20.dp),
+        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.7f)
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Icon(
+                painter = painterResource(icon),
+                contentDescription = null,
+                modifier = Modifier.size(16.dp),
+                tint = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Text(
+                text = text,
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1
+            )
+        }
+    }
+}
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
@@ -201,62 +235,184 @@ private fun OnlinePlaylistHeader(
     val menuState = LocalMenuState.current
 
     Column(
-        modifier = modifier.fillMaxWidth().padding(vertical = 16.dp),
+        modifier = modifier
+            .fillMaxWidth()
+            .padding(top = 8.dp, bottom = 20.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
+        // Playlist Thumbnail - Large centered with shadow
         Surface(
-            modifier = Modifier.size(240.dp),
-            shape = RoundedCornerShape(16.dp),
-            shadowElevation = 24.dp
+            modifier = Modifier
+                .size(240.dp)
+                .shadow(
+                    elevation = 24.dp,
+                    shape = RoundedCornerShape(16.dp),
+                    spotColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.3f)
+                ),
+            shape = RoundedCornerShape(16.dp)
         ) {
             AsyncImage(
                 model = ImageRequest.Builder(LocalContext.current).data(playlist.thumbnail).build(),
                 contentDescription = null,
-                contentScale = ContentScale.Crop
+                contentScale = ContentScale.Crop,
+                modifier = Modifier.fillMaxSize()
             )
         }
 
-        Spacer(Modifier.height(16.dp))
+        Spacer(modifier = Modifier.height(20.dp))
 
+        // Playlist Name
         Text(
-            playlist.title,
+            text = playlist.title,
             style = MaterialTheme.typography.headlineSmall,
             fontWeight = FontWeight.Bold,
             textAlign = TextAlign.Center,
             maxLines = 2,
-            overflow = TextOverflow.Ellipsis
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.padding(horizontal = 32.dp)
         )
 
-        Spacer(Modifier.height(24.dp))
+        Spacer(modifier = Modifier.height(16.dp))
 
-        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            if (songs.isNotEmpty()) {
-                Button(onClick = {
-                    playerConnection.playQueue(ListQueue(playlist.title, songs.map { it.toMediaItem() }))
-                }) {
-                    Icon(painterResource(R.drawable.play), null)
-                }
-            }
+        // Metadata Row - Song Count, Duration, Date
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 48.dp),
+            horizontalArrangement = Arrangement.SpaceEvenly,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            // Song Count
+            MetadataChip(
+                icon = R.drawable.music_note,
+                text = pluralStringResource(R.plurals.n_song, songs.size, songs.size)
+            )
 
-            Button(onClick = {
-                playerConnection.playQueue(
-                    ListQueue(playlist.title, songs.map { it.toMediaItem() }.shuffled())
+            // Duration
+            val totalDuration = songs.sumOf { it.duration ?: 0 }
+            if (totalDuration > 0) {
+                MetadataChip(
+                    icon = R.drawable.history,
+                    text = makeTimeString(totalDuration * 1000L)
                 )
-            }) {
-                Icon(painterResource(R.drawable.shuffle), null)
             }
+        }
 
-            IconButton(onClick = {
-                menuState.show {
-                    YouTubePlaylistMenu(
-                        playlist = playlist,
-                        songs = songs,
-                        coroutineScope = coroutineScope,
-                        onDismiss = menuState::dismiss
+        Spacer(modifier = Modifier.height(24.dp))
+
+        // Action Buttons Row
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 24.dp),
+            horizontalArrangement = Arrangement.spacedBy(12.dp, Alignment.CenterHorizontally),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            // Like Button
+            Surface(
+                onClick = {
+                    database.query {
+                        if (dbPlaylist != null) {
+                            update(dbPlaylist.playlist.toggleLike())
+                        } else {
+                            // Create new playlist entry if it doesn't exist
+                            insert(
+                                PlaylistEntity(
+                                    id = playlist.id,
+                                    name = playlist.title,
+                                    browseId = playlist.id,
+                                    bookmarkedAt = System.currentTimeMillis()
+                                )
+                            )
+                        }
+                    }
+                },
+                shape = CircleShape,
+                color = MaterialTheme.colorScheme.surfaceVariant,
+                modifier = Modifier.size(48.dp)
+            ) {
+                Box(
+                    modifier = Modifier.fillMaxSize(),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        painter = painterResource(
+                            if (dbPlaylist?.playlist?.bookmarkedAt != null) R.drawable.favorite else R.drawable.favorite_border
+                        ),
+                        contentDescription = null,
+                        tint = if (dbPlaylist?.playlist?.bookmarkedAt != null)
+                            MaterialTheme.colorScheme.error
+                        else
+                            MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.size(24.dp)
                     )
                 }
-            }) {
-                Icon(painterResource(R.drawable.more_vert), null)
+            }
+
+            // Play Button
+            Button(
+                onClick = {
+                    if (songs.isNotEmpty()) {
+                        playerConnection.playQueue(ListQueue(playlist.title, songs.map { it.toMediaItem() }))
+                    }
+                },
+                shape = RoundedCornerShape(24.dp),
+                modifier = Modifier
+                    .weight(1f)
+                    .height(48.dp)
+            ) {
+                Icon(
+                    painter = painterResource(R.drawable.play),
+                    contentDescription = stringResource(R.string.play),
+                    modifier = Modifier.size(24.dp)
+                )
+            }
+
+            // Shuffle Button
+            Button(
+                onClick = {
+                    playerConnection.playQueue(
+                        ListQueue(playlist.title, songs.map { it.toMediaItem() }.shuffled())
+                    )
+                },
+                shape = RoundedCornerShape(24.dp),
+                modifier = Modifier
+                    .weight(1f)
+                    .height(48.dp)
+            ) {
+                Icon(
+                    painter = painterResource(R.drawable.shuffle),
+                    contentDescription = stringResource(R.string.shuffle),
+                    modifier = Modifier.size(24.dp)
+                )
+            }
+
+            // More Button
+            Surface(
+                onClick = {
+                    menuState.show {
+                        YouTubePlaylistMenu(
+                            playlist = playlist,
+                            songs = songs,
+                            coroutineScope = coroutineScope,
+                            onDismiss = menuState::dismiss
+                        )
+                    }
+                },
+                shape = CircleShape,
+                color = MaterialTheme.colorScheme.surfaceVariant,
+                modifier = Modifier.size(48.dp)
+            ) {
+                Box(
+                    modifier = Modifier.fillMaxSize(),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        painter = painterResource(R.drawable.more_vert),
+                        contentDescription = null,
+                        modifier = Modifier.size(24.dp)
+                    )
+                }
             }
         }
     }

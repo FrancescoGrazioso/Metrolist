@@ -22,6 +22,9 @@ import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.core.net.toUri
+import androidx.media3.exoplayer.offline.DownloadRequest
+import androidx.media3.exoplayer.offline.DownloadService
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.material3.Button
@@ -76,6 +79,7 @@ import com.metrolist.music.constants.SongSortTypeKey
 import com.metrolist.music.constants.ThumbnailCornerRadius
 import com.metrolist.music.db.entities.Song
 import com.metrolist.music.extensions.toMediaItem
+import com.metrolist.music.playback.ExoDownloadService
 import com.metrolist.music.playback.queues.ListQueue
 import com.metrolist.music.ui.component.DraggableScrollbar
 import com.metrolist.music.ui.component.EmptyPlaceholder
@@ -484,6 +488,40 @@ private fun CachePlaylistHeader(
             horizontalArrangement = Arrangement.spacedBy(12.dp, Alignment.CenterHorizontally),
             verticalAlignment = Alignment.CenterVertically
         ) {
+            // Download Button (Left)
+            androidx.compose.material3.Surface(
+                onClick = {
+                    // Download all cached songs
+                    songs.forEach { song ->
+                        val downloadRequest = DownloadRequest
+                            .Builder(song.item.song.id, song.item.song.id.toUri())
+                            .setCustomCacheKey(song.item.song.id)
+                            .setData(song.item.song.title.toByteArray())
+                            .build()
+                        DownloadService.sendAddDownload(
+                            context,
+                            ExoDownloadService::class.java,
+                            downloadRequest,
+                            false,
+                        )
+                    }
+                },
+                shape = androidx.compose.foundation.shape.CircleShape,
+                color = MaterialTheme.colorScheme.surfaceVariant,
+                modifier = Modifier.size(48.dp)
+            ) {
+                Box(
+                    modifier = Modifier.fillMaxSize(),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        painter = painterResource(R.drawable.download),
+                        contentDescription = null,
+                        modifier = Modifier.size(24.dp)
+                    )
+                }
+            }
+
             // Play Button
             Button(
                 onClick = {
@@ -526,6 +564,29 @@ private fun CachePlaylistHeader(
                     contentDescription = stringResource(R.string.shuffle),
                     modifier = Modifier.size(24.dp)
                 )
+            }
+
+            // Queue Button (Right)
+            androidx.compose.material3.Surface(
+                onClick = {
+                    playerConnection.addToQueue(
+                        songs.map { it.item.toMediaItem() }
+                    )
+                },
+                shape = androidx.compose.foundation.shape.CircleShape,
+                color = MaterialTheme.colorScheme.surfaceVariant,
+                modifier = Modifier.size(48.dp)
+            ) {
+                Box(
+                    modifier = Modifier.fillMaxSize(),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        painter = painterResource(R.drawable.queue_music),
+                        contentDescription = null,
+                        modifier = Modifier.size(24.dp)
+                    )
+                }
             }
         }
     }

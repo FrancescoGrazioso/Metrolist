@@ -698,6 +698,26 @@ fun AlbumScreen(
                         contentDescription = null
                     )
                 }
+            } else {
+                // More button when not in selection mode
+                albumWithSongs?.let { album ->
+                    IconButton(
+                        onClick = {
+                            menuState.show {
+                                AlbumMenu(
+                                    originalAlbum = album,
+                                    navController = navController,
+                                    onDismiss = menuState::dismiss
+                                )
+                            }
+                        }
+                    ) {
+                        Icon(
+                            painter = painterResource(R.drawable.more_vert),
+                            contentDescription = null
+                        )
+                    }
+                }
             }
         }
     )
