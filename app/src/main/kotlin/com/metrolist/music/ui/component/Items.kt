@@ -1344,9 +1344,9 @@ fun BoxScope.OverlayEditButton(
         Box(
             contentAlignment = Alignment.Center,
             modifier = Modifier
-                .size(28.dp)
+                .size(if (alignment == Alignment.BottomEnd) 32.dp else 36.dp)
                 .clip(CircleShape)
-                .background(Color.Black.copy(alpha = ActiveBoxAlpha))
+                .background(Color.Black.copy(alpha = if (alignment == Alignment.BottomEnd) 0.6f else ActiveBoxAlpha))
                 .padding(0.dp)
                 .clickable(onClick = onClick)
         ) {
@@ -1354,7 +1354,7 @@ fun BoxScope.OverlayEditButton(
                 painter = painterResource(R.drawable.edit),
                 contentDescription = null,
                 tint = Color.White,
-                modifier = Modifier.size(16.dp)
+                modifier = Modifier.size(if (alignment == Alignment.BottomEnd) 16.dp else 20.dp)
             )
         }
     }

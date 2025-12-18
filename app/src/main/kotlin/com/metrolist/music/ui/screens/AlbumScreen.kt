@@ -467,36 +467,6 @@ fun AlbumScreen(
                     }
 
                     Spacer(modifier = Modifier.height(24.dp))
-
-                    // Additional action buttons row (menu)
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 24.dp),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.CenterHorizontally)
-                    ) {
-                        IconButton(
-                            onClick = {
-                                menuState.show {
-                                    AlbumMenu(
-                                        originalAlbum = Album(
-                                            albumWithSongs.album,
-                                            albumWithSongs.artists
-                                        ),
-                                        navController = navController,
-                                        onDismiss = menuState::dismiss,
-                                    )
-                                }
-                            },
-                            modifier = Modifier.size(40.dp)
-                        ) {
-                            Icon(
-                                painter = painterResource(R.drawable.more_vert),
-                                contentDescription = null,
-                                modifier = Modifier.size(24.dp)
-                            )
-                        }
-                    }
                 }
             }
 
@@ -747,7 +717,7 @@ private fun AlbumHeaderPlaceholder() {
                         spotColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.3f)
                     ),
                 shape = RoundedCornerShape(16.dp),
-                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.1f)
+                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.12f)
             ) {}
         }
 
@@ -757,7 +727,7 @@ private fun AlbumHeaderPlaceholder() {
                 .height(24.dp)
                 .fillMaxWidth(0.6f)
                 .clip(RoundedCornerShape(12.dp))
-                .background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.1f))
+                .background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.12f))
         )
 
         Spacer(modifier = Modifier.height(8.dp))
@@ -768,7 +738,7 @@ private fun AlbumHeaderPlaceholder() {
                 .height(16.dp)
                 .fillMaxWidth(0.4f)
                 .clip(RoundedCornerShape(8.dp))
-                .background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.1f))
+                .background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.12f))
         )
 
         Spacer(modifier = Modifier.height(16.dp))
@@ -779,7 +749,7 @@ private fun AlbumHeaderPlaceholder() {
                 .height(32.dp)
                 .width(120.dp)
                 .clip(RoundedCornerShape(20.dp))
-                .background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.1f))
+                .background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.12f))
         )
 
         Spacer(modifier = Modifier.height(24.dp))
@@ -797,7 +767,7 @@ private fun AlbumHeaderPlaceholder() {
                 modifier = Modifier
                     .size(48.dp)
                     .clip(androidx.compose.foundation.shape.CircleShape)
-                    .background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.1f))
+                    .background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.12f))
             )
 
             // Play button placeholder
@@ -806,7 +776,7 @@ private fun AlbumHeaderPlaceholder() {
                     .weight(1f)
                     .height(48.dp)
                     .clip(RoundedCornerShape(24.dp))
-                    .background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.1f))
+                    .background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.12f))
             )
 
             // Shuffle button placeholder
@@ -815,7 +785,7 @@ private fun AlbumHeaderPlaceholder() {
                     .weight(1f)
                     .height(48.dp)
                     .clip(RoundedCornerShape(24.dp))
-                    .background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.1f))
+                    .background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.12f))
             )
 
             // More button placeholder
@@ -823,7 +793,7 @@ private fun AlbumHeaderPlaceholder() {
                 modifier = Modifier
                     .size(48.dp)
                     .clip(androidx.compose.foundation.shape.CircleShape)
-                    .background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.1f))
+                    .background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.12f))
             )
         }
     }

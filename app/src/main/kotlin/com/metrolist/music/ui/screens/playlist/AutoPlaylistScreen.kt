@@ -621,6 +621,29 @@ private fun AutoPlaylistHeader(
             horizontalArrangement = Arrangement.spacedBy(12.dp, Alignment.CenterHorizontally),
             verticalAlignment = Alignment.CenterVertically
         ) {
+            // Queue Button
+            androidx.compose.material3.Surface(
+                onClick = {
+                    playerConnection.addToQueue(
+                        songs.map { it.toMediaItem() }
+                    )
+                },
+                shape = androidx.compose.foundation.shape.CircleShape,
+                color = MaterialTheme.colorScheme.surfaceVariant,
+                modifier = Modifier.size(48.dp)
+            ) {
+                Box(
+                    modifier = Modifier.fillMaxSize(),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        painter = painterResource(R.drawable.queue_music),
+                        contentDescription = null,
+                        modifier = Modifier.size(24.dp)
+                    )
+                }
+            }
+
             // Play Button
             Button(
                 onClick = {
@@ -729,29 +752,6 @@ private fun AutoPlaylistHeader(
                             )
                         }
                     }
-                }
-            }
-
-            // Queue Button
-            androidx.compose.material3.Surface(
-                onClick = {
-                    playerConnection.addToQueue(
-                        songs.map { it.toMediaItem() }
-                    )
-                },
-                shape = androidx.compose.foundation.shape.CircleShape,
-                color = MaterialTheme.colorScheme.surfaceVariant,
-                modifier = Modifier.size(48.dp)
-            ) {
-                Box(
-                    modifier = Modifier.fillMaxSize(),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Icon(
-                        painter = painterResource(R.drawable.queue_music),
-                        contentDescription = null,
-                        modifier = Modifier.size(24.dp)
-                    )
                 }
             }
         }

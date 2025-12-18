@@ -1175,6 +1175,7 @@ fun LocalPlaylistHeader(
                         if (editable) {
                             OverlayEditButton(
                                 visible = true,
+                                alignment = Alignment.BottomEnd,
                                 onClick = {
                                     if (isCustomThumbnail) {
                                         menuState.show(
@@ -1254,6 +1255,7 @@ fun LocalPlaylistHeader(
                         if (editable) {
                             OverlayEditButton(
                                 visible = true,
+                                alignment = Alignment.BottomEnd,
                                 onClick = {
                                     if (isCustomThumbnail) {
                                         menuState.show(
@@ -1523,7 +1525,7 @@ fun LocalPlaylistHeader(
 
         Spacer(modifier = Modifier.height(16.dp))
 
-        // Secondary Action Buttons Row (edit, sync, queue, search)
+        // Secondary Action Buttons Row (edit, sync, queue)
         Row(
             modifier = Modifier
                 .fillMaxWidth()
@@ -1617,16 +1619,6 @@ fun LocalPlaylistHeader(
                         modifier = Modifier.size(24.dp)
                     )
                 }
-            }
-            
-            IconButton(
-                onClick = onStartSearch
-            ) {
-                Icon(
-                    painter = painterResource(R.drawable.search),
-                    contentDescription = null,
-                    modifier = Modifier.size(24.dp)
-                )
             }
         }
 

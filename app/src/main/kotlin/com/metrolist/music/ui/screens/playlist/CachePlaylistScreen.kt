@@ -490,23 +490,12 @@ private fun CachePlaylistHeader(
             horizontalArrangement = Arrangement.spacedBy(12.dp, Alignment.CenterHorizontally),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            // Download Button (Left)
+            // Queue Button (Left)
             androidx.compose.material3.Surface(
                 onClick = {
-                    // Download all cached songs
-                    songs.forEach { song ->
-                        val downloadRequest = DownloadRequest
-                            .Builder(song.item.song.id, song.item.song.id.toUri())
-                            .setCustomCacheKey(song.item.song.id)
-                            .setData(song.item.song.title.toByteArray())
-                            .build()
-                        DownloadService.sendAddDownload(
-                            context,
-                            ExoDownloadService::class.java,
-                            downloadRequest,
-                            false,
-                        )
-                    }
+                    playerConnection.addToQueue(
+                        songs.map { it.item.toMediaItem() }
+                    )
                 },
                 shape = androidx.compose.foundation.shape.CircleShape,
                 color = MaterialTheme.colorScheme.surfaceVariant,
@@ -517,7 +506,7 @@ private fun CachePlaylistHeader(
                     contentAlignment = Alignment.Center
                 ) {
                     Icon(
-                        painter = painterResource(R.drawable.download),
+                        painter = painterResource(R.drawable.queue_music),
                         contentDescription = null,
                         modifier = Modifier.size(24.dp)
                     )
@@ -568,12 +557,23 @@ private fun CachePlaylistHeader(
                 )
             }
 
-            // Queue Button (Right)
+            // Download Button (Right)
             androidx.compose.material3.Surface(
                 onClick = {
-                    playerConnection.addToQueue(
-                        songs.map { it.item.toMediaItem() }
-                    )
+                    // Download all cached songs
+                    songs.forEach { song ->
+                        val downloadRequest = DownloadRequest
+                            .Builder(song.item.song.id, song.item.song.id.toUri())
+                            .setCustomCacheKey(song.item.song.id)
+                            .setData(song.item.song.title.toByteArray())
+                            .build()
+                        DownloadService.sendAddDownload(
+                            context,
+                            ExoDownloadService::class.java,
+                            downloadRequest,
+                            false,
+                        )
+                    }
                 },
                 shape = androidx.compose.foundation.shape.CircleShape,
                 color = MaterialTheme.colorScheme.surfaceVariant,
@@ -584,7 +584,7 @@ private fun CachePlaylistHeader(
                     contentAlignment = Alignment.Center
                 ) {
                     Icon(
-                        painter = painterResource(R.drawable.queue_music),
+                        painter = painterResource(R.drawable.download),
                         contentDescription = null,
                         modifier = Modifier.size(24.dp)
                     )
