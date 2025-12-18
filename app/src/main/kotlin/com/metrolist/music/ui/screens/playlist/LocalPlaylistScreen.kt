@@ -487,6 +487,7 @@ fun LocalPlaylistScreen(
                                 onShowEditDialog = { showEditDialog = true },
                                 onShowRemoveDownloadDialog = { showRemoveDownloadDialog = true },
                                 onshowDeletePlaylistDialog = { showDeletePlaylistDialog = true },
+                                onStartSearch = { isSearching = true },
                                 snackbarHostState = snackbarHostState,
                                 modifier = Modifier.animateItem()
                             )
@@ -927,113 +928,14 @@ fun LocalPlaylistScreen(
                         }
                     }
                 } else if (!isSearching) {
-                    // Secondary action buttons (edit, sync, queue)
-                    playlist?.let { playlistData ->
-                        val editable = playlistData.playlist.isEditable
-                        
-                        if (editable) {
-                            Surface(
-                                onClick = { showEditDialog = true },
-                                shape = CircleShape,
-                                color = MaterialTheme.colorScheme.surfaceVariant,
-                                modifier = Modifier.size(40.dp)
-                            ) {
-                                Box(
-                                    modifier = Modifier.fillMaxSize(),
-                                    contentAlignment = Alignment.Center
-                                ) {
-                                    Icon(
-                                        painter = painterResource(R.drawable.edit),
-                                        contentDescription = null,
-                                        modifier = Modifier.size(20.dp)
-                                    )
-                                }
-                            }
-                        }
-                        
-                        if (playlistData.playlist.browseId != null) {
-                            Surface(
-                                onClick = {
-                                    coroutineScope.launch(Dispatchers.IO) {
-                                        val playlistPage = YouTube.playlist(playlistData.playlist.browseId)
-                                            .completed()
-                                            .getOrNull() ?: return@launch
-                                        database.transaction {
-                                            clearPlaylist(playlistData.id)
-                                            playlistPage.songs
-                                                .map(SongItem::toMediaMetadata)
-                                                .onEach(::insert)
-                                                .mapIndexed { position, song ->
-                                                    PlaylistSongMap(
-                                                        songId = song.id,
-                                                        playlistId = playlistData.id,
-                                                        position = position,
-                                                        setVideoId = song.setVideoId
-                                                    )
-                                                }
-                                                .forEach(::insert)
-                                        }
-                                    }
-                                    coroutineScope.launch(Dispatchers.Main) {
-                                        snackbarHostState.showSnackbar(context.getString(R.string.playlist_synced))
-                                    }
-                                },
-                                shape = CircleShape,
-                                color = MaterialTheme.colorScheme.surfaceVariant,
-                                modifier = Modifier.size(40.dp)
-                            ) {
-                                Box(
-                                    modifier = Modifier.fillMaxSize(),
-                                    contentAlignment = Alignment.Center
-                                ) {
-                                    Icon(
-                                        painter = painterResource(R.drawable.sync),
-                                        contentDescription = null,
-                                        modifier = Modifier.size(20.dp)
-                                    )
-                                }
-                            }
-                        }
-                        
-                        Surface(
-                            onClick = {
-                                playerConnection.addToQueue(
-                                    items = songs.map { it.song.toMediaItem() },
-                                )
-                            },
-                            shape = CircleShape,
-                            color = MaterialTheme.colorScheme.surfaceVariant,
-                            modifier = Modifier.size(40.dp)
-                        ) {
-                            Box(
-                                modifier = Modifier.fillMaxSize(),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Icon(
-                                    painter = painterResource(R.drawable.queue_music),
-                                    contentDescription = null,
-                                    modifier = Modifier.size(20.dp)
-                                )
-                            }
-                        }
-                    }
-                    
-                    Surface(
-                        onClick = { isSearching = true },
-                        shape = CircleShape,
-                        color = MaterialTheme.colorScheme.surfaceVariant,
-                        modifier = Modifier.size(40.dp)
+                    // Only search button remains in TopAppBar
+                    IconButton(
+                        onClick = { isSearching = true }
                     ) {
-                        Box(
-                            modifier = Modifier.fillMaxSize(),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Icon(
-                                painter = painterResource(R.drawable.search),
-                                contentDescription = null,
-                                modifier = Modifier.size(20.dp)
-                            )
-                        }
+                        Icon(
+                            painter = painterResource(R.drawable.search),
+                            contentDescription = null
+                        )
                     }
                 }
             }
@@ -1056,6 +958,7 @@ fun LocalPlaylistHeader(
     onShowEditDialog: () -> Unit,
     onShowRemoveDownloadDialog: () -> Unit,
     onshowDeletePlaylistDialog: () -> Unit,
+    onStartSearch: () -> Unit,
     snackbarHostState: SnackbarHostState,
     modifier: Modifier,
 ) {
@@ -1615,6 +1518,115 @@ fun LocalPlaylistHeader(
                         }
                     }
                 }
+            }
+        }
+
+        Spacer(modifier = Modifier.height(16.dp))
+
+        // Secondary Action Buttons Row (edit, sync, queue, search)
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 24.dp),
+            horizontalArrangement = Arrangement.spacedBy(12.dp, Alignment.CenterHorizontally),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            val editable = playlist.playlist.isEditable
+            
+            if (editable) {
+                Surface(
+                    onClick = onShowEditDialog,
+                    shape = CircleShape,
+                    color = MaterialTheme.colorScheme.surfaceVariant,
+                    modifier = Modifier.size(48.dp)
+                ) {
+                    Box(
+                        modifier = Modifier.fillMaxSize(),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            painter = painterResource(R.drawable.edit),
+                            contentDescription = null,
+                            modifier = Modifier.size(24.dp)
+                        )
+                    }
+                }
+            }
+            
+            if (playlist.playlist.browseId != null) {
+                Surface(
+                    onClick = {
+                        scope.launch(Dispatchers.IO) {
+                            val playlistPage = YouTube.playlist(playlist.playlist.browseId)
+                                .completed()
+                                .getOrNull() ?: return@launch
+                            database.transaction {
+                                clearPlaylist(playlist.id)
+                                playlistPage.songs
+                                    .map(SongItem::toMediaMetadata)
+                                    .onEach(::insert)
+                                    .mapIndexed { position, song ->
+                                        PlaylistSongMap(
+                                            songId = song.id,
+                                            playlistId = playlist.id,
+                                            position = position,
+                                            setVideoId = song.setVideoId
+                                        )
+                                    }
+                                    .forEach(::insert)
+                            }
+                        }
+                        scope.launch(Dispatchers.Main) {
+                            snackbarHostState.showSnackbar(context.getString(R.string.playlist_synced))
+                        }
+                    },
+                    shape = CircleShape,
+                    color = MaterialTheme.colorScheme.surfaceVariant,
+                    modifier = Modifier.size(48.dp)
+                ) {
+                    Box(
+                        modifier = Modifier.fillMaxSize(),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            painter = painterResource(R.drawable.sync),
+                            contentDescription = null,
+                            modifier = Modifier.size(24.dp)
+                        )
+                    }
+                }
+            }
+            
+            Surface(
+                onClick = {
+                    playerConnection.addToQueue(
+                        items = songs.map { it.song.toMediaItem() },
+                    )
+                },
+                shape = CircleShape,
+                color = MaterialTheme.colorScheme.surfaceVariant,
+                modifier = Modifier.size(48.dp)
+            ) {
+                Box(
+                    modifier = Modifier.fillMaxSize(),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        painter = painterResource(R.drawable.queue_music),
+                        contentDescription = null,
+                        modifier = Modifier.size(24.dp)
+                    )
+                }
+            }
+            
+            IconButton(
+                onClick = onStartSearch
+            ) {
+                Icon(
+                    painter = painterResource(R.drawable.search),
+                    contentDescription = null,
+                    modifier = Modifier.size(24.dp)
+                )
             }
         }
 

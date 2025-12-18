@@ -498,7 +498,7 @@ private fun CachePlaylistHeader(
                             .setCustomCacheKey(song.item.song.id)
                             .setData(song.item.song.title.toByteArray())
                             .build()
-                        DownloadService.sendAddDownload(
+                        androidx.media3.exoplayer.offline.DownloadService.sendAddDownload(
                             context,
                             ExoDownloadService::class.java,
                             downloadRequest,

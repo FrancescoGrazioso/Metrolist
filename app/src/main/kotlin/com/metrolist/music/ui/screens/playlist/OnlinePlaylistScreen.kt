@@ -58,6 +58,7 @@ import com.metrolist.music.utils.rememberPreference
 import com.metrolist.music.utils.makeTimeString
 import com.metrolist.music.constants.HideExplicitKey
 import com.metrolist.music.viewmodels.OnlinePlaylistViewModel
+import java.time.LocalDateTime
 
 @Composable
 private fun MetadataChip(
@@ -321,7 +322,7 @@ private fun OnlinePlaylistHeader(
                                     id = playlist.id,
                                     name = playlist.title,
                                     browseId = playlist.id,
-                                    bookmarkedAt = System.currentTimeMillis()
+                                    bookmarkedAt = LocalDateTime.now()
                                 )
                             )
                         }
