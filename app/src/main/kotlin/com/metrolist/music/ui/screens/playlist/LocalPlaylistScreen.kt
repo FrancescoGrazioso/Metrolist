@@ -119,6 +119,7 @@ import com.metrolist.innertube.models.SongItem
 import com.metrolist.innertube.utils.completed
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import com.metrolist.music.LocalDatabase
 import com.metrolist.music.LocalDownloadUtil
 import com.metrolist.music.LocalPlayerAwareWindowInsets
@@ -163,8 +164,6 @@ import com.metrolist.music.utils.rememberPreference
 import com.metrolist.music.utils.reportException
 import com.metrolist.music.viewmodels.LocalPlaylistViewModel
 import io.ktor.client.plugins.ClientRequestException
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
 import sh.calvin.reorderable.ReorderableItem
 import sh.calvin.reorderable.rememberReorderableLazyListState
 import java.time.LocalDateTime
@@ -925,7 +924,7 @@ fun LocalPlaylistScreen(
                         
                         if (editable) {
                             IconButton(
-                                onClick = onShowEditDialog
+                                onClick = { showEditDialog = true }
                             ) {
                                 Icon(
                                     painter = painterResource(R.drawable.edit),
