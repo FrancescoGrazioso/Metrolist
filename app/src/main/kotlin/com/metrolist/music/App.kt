@@ -25,6 +25,8 @@ import com.metrolist.innertube.YouTube
 import com.metrolist.innertube.models.YouTubeLocale
 import com.metrolist.kugou.KuGou
 import com.metrolist.lastfm.LastFM
+import com.metrolist.spotify.Spotify
+import com.metrolist.spotify.SpotifyAuth
 import com.metrolist.music.BuildConfig
 import com.metrolist.music.constants.*
 import com.metrolist.music.di.ApplicationScope
@@ -100,6 +102,48 @@ class App : Application(), SingletonImageLoader.Factory {
             apiKey = BuildConfig.LASTFM_API_KEY.takeIf { it.isNotEmpty() } ?: "",
             secret = BuildConfig.LASTFM_SECRET.takeIf { it.isNotEmpty() } ?: ""
         )
+
+        // Initialize Spotify Auth with Client ID from BuildConfig
+        val spotifyClientId = BuildConfig.SPOTIFY_CLIENT_ID.takeIf { it.isNotEmpty() } ?: ""
+        if (spotifyClientId.isNotEmpty()) {
+            SpotifyAuth.initialize(spotifyClientId)
+            Timber.d("SpotifyAuth initialized with client ID: ${spotifyClientId.take(8)}...")
+        } else {
+            Timber.w("SpotifyAuth NOT initialized - no SPOTIFY_CLIENT_ID in BuildConfig")
+        }
+
+        // Wire up Spotify API logging to Timber
+        Spotify.logger = { level, message ->
+            when (level) {
+                "E" -> Timber.tag("SpotifyAPI").e(message)
+                "W" -> Timber.tag("SpotifyAPI").w(message)
+                else -> Timber.tag("SpotifyAPI").d(message)
+            }
+        }
+
+        // Restore Spotify access token from preferences
+        settings[SpotifyAccessTokenKey]?.takeIf { it.isNotEmpty() }?.let { token ->
+            val expiry = settings[SpotifyTokenExpiryKey] ?: 0L
+            if (System.currentTimeMillis() < expiry) {
+                Spotify.accessToken = token
+            } else {
+                // Token expired, attempt refresh
+                settings[SpotifyRefreshTokenKey]?.takeIf { it.isNotEmpty() }?.let { refreshToken ->
+                    applicationScope.launch(Dispatchers.IO) {
+                        SpotifyAuth.refreshToken(refreshToken).onSuccess { newToken ->
+                            Spotify.accessToken = newToken.accessToken
+                            dataStore.edit { prefs ->
+                                prefs[SpotifyAccessTokenKey] = newToken.accessToken
+                                prefs[SpotifyTokenExpiryKey] = System.currentTimeMillis() + (newToken.expiresIn * 1000L)
+                                newToken.refreshToken?.let { prefs[SpotifyRefreshTokenKey] = it }
+                            }
+                        }.onFailure { e ->
+                            Timber.e(e, "Failed to refresh Spotify token on startup")
+                        }
+                    }
+                }
+            }
+        }
 
         if (settings[ProxyEnabledKey] == true) {
             val username = settings[ProxyUsernameKey].orEmpty()

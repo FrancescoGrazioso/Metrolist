@@ -2,7 +2,7 @@
   "formatVersion": 1,
   "database": {
     "version": 32,
-    "identityHash": "6c3169c6fab939b089c79314ac12d9b9",
+    "identityHash": "PLACEHOLDER_WILL_BE_REGENERATED",
     "entities": [
       {
         "tableName": "song",
@@ -1174,6 +1174,54 @@
             "createSql": "CREATE INDEX IF NOT EXISTS `index_recognition_history_trackId` ON `${TABLE_NAME}` (`trackId`)"
           }
         ]
+      },
+      {
+        "tableName": "spotify_match",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`spotifyId` TEXT NOT NULL, `youtubeId` TEXT NOT NULL, `title` TEXT NOT NULL, `artist` TEXT NOT NULL, `matchScore` REAL NOT NULL, `cachedAt` INTEGER NOT NULL, PRIMARY KEY(`spotifyId`))",
+        "fields": [
+          {
+            "fieldPath": "spotifyId",
+            "columnName": "spotifyId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "youtubeId",
+            "columnName": "youtubeId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "title",
+            "columnName": "title",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "artist",
+            "columnName": "artist",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "matchScore",
+            "columnName": "matchScore",
+            "affinity": "REAL",
+            "notNull": true
+          },
+          {
+            "fieldPath": "cachedAt",
+            "columnName": "cachedAt",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "spotifyId"
+          ]
+        }
       }
     ],
     "views": [
@@ -1192,7 +1240,7 @@
     ],
     "setupQueries": [
       "CREATE TABLE IF NOT EXISTS room_master_table (id INTEGER PRIMARY KEY,identity_hash TEXT)",
-      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, '6c3169c6fab939b089c79314ac12d9b9')"
+      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, 'PLACEHOLDER_WILL_BE_REGENERATED')"
     ]
   }
 }

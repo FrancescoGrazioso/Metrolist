@@ -343,6 +343,23 @@
     <string name="hide_video_songs">Hide video songs</string>
     <string name="hide_youtube_shorts">Hide YouTube Shorts</string>
 
+    <!-- Spotify -->
+    <string name="spotify_integration">Spotify Integration</string>
+    <string name="spotify_login">Log in with Spotify</string>
+    <string name="spotify_login_description">Connect your Spotify account to load playlists and liked songs</string>
+    <string name="spotify_not_logged_in">Not logged in</string>
+    <string name="spotify_enable">Use Spotify as source</string>
+    <string name="spotify_enable_description">Load playlists, liked songs and recommendations from your Spotify account</string>
+    <string name="spotify_music_source">Music Source</string>
+    <string name="spotify_music_source_description">Choose where to load your library from</string>
+    <string name="spotify_source_youtube">YouTube Music</string>
+    <string name="spotify_source_spotify">Spotify</string>
+    <string name="spotify_logging_in">Connecting to Spotify…</string>
+    <string name="spotify_login_error">Login failed. Please try again.</string>
+    <string name="spotify_login_success">Connected to Spotify</string>
+    <string name="spotify_token_expired">Spotify session expired, please log in again</string>
+    <string name="spotify_client_id_missing">Spotify Client ID not configured</string>
+
     <string name="details_desc">View the song\'s information</string>
     <string name="edit_desc">Change the title or artist</string>
     <string name="start_radio_desc">Create a station based on this item</string>

@@ -40,6 +40,7 @@ import com.metrolist.music.db.entities.SongAlbumMap
 import com.metrolist.music.db.entities.SongArtistMap
 import com.metrolist.music.db.entities.SongEntity
 import com.metrolist.music.db.entities.SpeedDialItem
+import com.metrolist.music.db.entities.SpotifyMatchEntity
 import com.metrolist.music.db.entities.SortedSongAlbumMap
 import com.metrolist.music.db.entities.SortedSongArtistMap
 import com.metrolist.music.extensions.toSQLiteQuery
@@ -106,7 +107,8 @@ class MusicDatabase(
         SetVideoIdEntity::class,
         PlayCountEntity::class,
         RecognitionHistory::class,
-        SpeedDialItem::class
+        SpeedDialItem::class,
+        SpotifyMatchEntity::class
     ],
     views = [
         SortedSongArtistMap::class,

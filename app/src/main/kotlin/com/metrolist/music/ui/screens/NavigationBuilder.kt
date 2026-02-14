@@ -35,6 +35,7 @@ import com.metrolist.music.ui.screens.playlist.AutoPlaylistScreen
 import com.metrolist.music.ui.screens.playlist.CachePlaylistScreen
 import com.metrolist.music.ui.screens.playlist.LocalPlaylistScreen
 import com.metrolist.music.ui.screens.playlist.OnlinePlaylistScreen
+import com.metrolist.music.ui.screens.playlist.SpotifyPlaylistScreen
 import com.metrolist.music.ui.screens.playlist.TopPlaylistScreen
 import com.metrolist.music.ui.screens.search.OnlineSearchResult
 import com.metrolist.music.ui.screens.search.SearchScreen
@@ -56,6 +57,7 @@ import com.metrolist.music.ui.screens.settings.integrations.DiscordSettings
 import com.metrolist.music.ui.screens.settings.integrations.IntegrationScreen
 import com.metrolist.music.ui.screens.settings.integrations.LastFMSettings
 import com.metrolist.music.ui.screens.settings.integrations.ListenTogetherSettings
+import com.metrolist.music.ui.screens.settings.integrations.SpotifySettings
 import com.metrolist.music.ui.screens.recognition.RecognitionScreen
 import com.metrolist.music.ui.screens.recognition.RecognitionHistoryScreen
 import com.metrolist.music.ui.screens.wrapped.WrappedScreen
@@ -362,6 +364,25 @@ fun NavGraphBuilder.navigationBuilder(
 
     composable(route = "settings/integrations/listen_together") {
         ListenTogetherSettings(navController, scrollBehavior)
+    }
+
+    composable("settings/integrations/spotify") {
+        SpotifySettings(navController, scrollBehavior)
+    }
+
+    composable("settings/spotify/login") {
+        SpotifyLoginScreen(navController)
+    }
+
+    composable(
+        route = "spotify_playlist/{playlistId}",
+        arguments = listOf(
+            navArgument("playlistId") {
+                type = NavType.StringType
+            },
+        ),
+    ) {
+        SpotifyPlaylistScreen(navController, scrollBehavior)
     }
 
     composable("settings/discord/login") {

@@ -79,6 +79,8 @@ import com.metrolist.music.ui.component.SortHeader
 import com.metrolist.music.utils.rememberEnumPreference
 import com.metrolist.music.utils.rememberPreference
 import com.metrolist.music.viewmodels.LibraryPlaylistsViewModel
+import com.metrolist.music.viewmodels.SpotifyViewModel
+import com.metrolist.spotify.SpotifyMapper
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.util.UUID
@@ -89,6 +91,7 @@ fun LibraryPlaylistsScreen(
     navController: NavController,
     filterContent: @Composable () -> Unit,
     viewModel: LibraryPlaylistsViewModel = hiltViewModel(),
+    spotifyViewModel: SpotifyViewModel = hiltViewModel(),
     initialTextFieldValue: String? = null,
     allowSyncing: Boolean = true,
 ) {
@@ -111,6 +114,18 @@ fun LibraryPlaylistsScreen(
     val playlists by viewModel.allPlaylists.collectAsState()
 
     val topSize by viewModel.topValue.collectAsState(initial = 50)
+
+    // Spotify integration - when active, Spotify is the PRIMARY source
+    val isSpotifyActive by spotifyViewModel.isSpotifyActive.collectAsState()
+    val spotifyPlaylists by spotifyViewModel.spotifyPlaylists.collectAsState()
+    val isUsingFallback by spotifyViewModel.isUsingFallback.collectAsState()
+    val fallbackReason by spotifyViewModel.fallbackReason.collectAsState()
+
+    LaunchedEffect(isSpotifyActive) {
+        if (isSpotifyActive) {
+            spotifyViewModel.loadAll()
+        }
+    }
 
     val likedPlaylist =
         Playlist(
@@ -385,7 +400,7 @@ fun LibraryPlaylistsScreen(
                     }
 
                     playlists.let { playlists ->
-                        if (playlists.isEmpty()) {
+                        if (playlists.isEmpty() && spotifyPlaylists.isEmpty()) {
                             item(key = "empty_placeholder") {
                             }
                         }
@@ -401,6 +416,36 @@ fun LibraryPlaylistsScreen(
                                 coroutineScope = coroutineScope,
                                 playlist = playlist,
                                 modifier = Modifier.animateItem()
+                            )
+                        }
+                    }
+
+                    // Spotify playlists rendered as regular playlist items
+                    if (isSpotifyActive && spotifyPlaylists.isNotEmpty()) {
+                        items(
+                            items = spotifyPlaylists,
+                            key = { "spotify_${it.id}" },
+                            contentType = { CONTENT_TYPE_PLAYLIST },
+                        ) { spotifyPlaylist ->
+                            val thumbnailUrl = SpotifyMapper.getPlaylistThumbnail(spotifyPlaylist)
+                            PlaylistListItem(
+                                playlist = Playlist(
+                                    playlist = PlaylistEntity(
+                                        id = "spotify_${spotifyPlaylist.id}",
+                                        name = spotifyPlaylist.name,
+                                        thumbnailUrl = thumbnailUrl,
+                                        remoteSongCount = spotifyPlaylist.tracks?.total,
+                                    ),
+                                    songCount = spotifyPlaylist.tracks?.total ?: 0,
+                                    songThumbnails = listOfNotNull(thumbnailUrl),
+                                ),
+                                autoPlaylist = false,
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clickable {
+                                        navController.navigate("spotify_playlist/${spotifyPlaylist.id}")
+                                    }
+                                    .animateItem(),
                             )
                         }
                     }
@@ -549,7 +594,7 @@ fun LibraryPlaylistsScreen(
                     }
 
                     playlists.let { playlists ->
-                        if (playlists.isEmpty()) {
+                        if (playlists.isEmpty() && spotifyPlaylists.isEmpty()) {
                             item(span = { GridItemSpan(maxLineSpan) }) {
                             }
                         }
@@ -565,6 +610,37 @@ fun LibraryPlaylistsScreen(
                                 coroutineScope = coroutineScope,
                                 playlist = playlist,
                                 modifier = Modifier.animateItem()
+                            )
+                        }
+                    }
+
+                    // Spotify playlists in grid view
+                    if (isSpotifyActive && spotifyPlaylists.isNotEmpty()) {
+                        items(
+                            items = spotifyPlaylists,
+                            key = { "spotify_${it.id}" },
+                            contentType = { CONTENT_TYPE_PLAYLIST },
+                        ) { spotifyPlaylist ->
+                            val thumbnailUrl = SpotifyMapper.getPlaylistThumbnail(spotifyPlaylist)
+                            PlaylistGridItem(
+                                playlist = Playlist(
+                                    playlist = PlaylistEntity(
+                                        id = "spotify_${spotifyPlaylist.id}",
+                                        name = spotifyPlaylist.name,
+                                        thumbnailUrl = thumbnailUrl,
+                                        remoteSongCount = spotifyPlaylist.tracks?.total,
+                                    ),
+                                    songCount = spotifyPlaylist.tracks?.total ?: 0,
+                                    songThumbnails = listOfNotNull(thumbnailUrl),
+                                ),
+                                fillMaxWidth = true,
+                                autoPlaylist = false,
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clickable {
+                                        navController.navigate("spotify_playlist/${spotifyPlaylist.id}")
+                                    }
+                                    .animateItem(),
                             )
                         }
                     }

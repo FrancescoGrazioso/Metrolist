@@ -35,6 +35,10 @@ android {
 
         buildConfigField("String", "LASTFM_API_KEY", "\"$lastFmKey\"")
         buildConfigField("String", "LASTFM_SECRET", "\"$lastFmSecret\"")
+
+        // Spotify API Client ID (register at https://developer.spotify.com)
+        val spotifyClientId = localProperties.getProperty("SPOTIFY_CLIENT_ID") ?: System.getenv("SPOTIFY_CLIENT_ID") ?: ""
+        buildConfigField("String", "SPOTIFY_CLIENT_ID", "\"$spotifyClientId\"")
         
         // NDK configuration for vibra_fp library
         ndk {
@@ -42,12 +46,13 @@ android {
         }
     }
     
-    externalNativeBuild {
-        cmake {
-            path("src/main/cpp/vibrafp/lib/CMakeLists.txt")
-            version = "3.22.1"
-        }
-    }
+    // TODO: Re-enable once FFTW3 prebuilt libraries are available
+    // externalNativeBuild {
+    //     cmake {
+    //         path("src/main/cpp/vibrafp/lib/CMakeLists.txt")
+    //         version = "3.22.1"
+    //     }
+    // }
 
     flavorDimensions += listOf("abi", "variant")
     productFlavors {
@@ -124,14 +129,15 @@ android {
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
             )
-            externalNativeBuild {
-                cmake {
-                    arguments += listOf(
-                        "-DENABLE_LTO=ON",
-                        "-DCMAKE_BUILD_TYPE=Release"
-                    )
-                }
-            }
+            // TODO: Re-enable once FFTW3 prebuilt libraries are available
+            // externalNativeBuild {
+            //     cmake {
+            //         arguments += listOf(
+            //             "-DENABLE_LTO=ON",
+            //             "-DCMAKE_BUILD_TYPE=Release"
+            //         )
+            //     }
+            // }
             ndk {
                 debugSymbolLevel = "NONE"
             }
@@ -144,14 +150,15 @@ android {
             } else {
                 signingConfigs.getByName("persistentDebug")
             }
-            externalNativeBuild {
-                cmake {
-                    arguments += listOf(
-                        "-DENABLE_LTO=OFF",
-                        "-DCMAKE_BUILD_TYPE=Debug"
-                    )
-                }
-            }
+            // TODO: Re-enable once FFTW3 prebuilt libraries are available
+            // externalNativeBuild {
+            //     cmake {
+            //         arguments += listOf(
+            //             "-DENABLE_LTO=OFF",
+            //             "-DCMAKE_BUILD_TYPE=Debug"
+            //         )
+            //     }
+            // }
             ndk {
                 debugSymbolLevel = "FULL"
             }
@@ -231,6 +238,7 @@ dependencies {
     implementation(libs.concurrent.futures)
 
     implementation(libs.activity)
+    implementation(libs.browser)
     implementation(libs.hilt.navigation)
     implementation(libs.datastore)
 
@@ -287,6 +295,7 @@ dependencies {
     implementation(project(":betterlyrics"))
     implementation(project(":simpmusic"))
     implementation(project(":shazamkit"))
+    implementation(project(":spotify"))
 
     implementation(libs.ktor.client.core)
     implementation(libs.ktor.serialization.json)

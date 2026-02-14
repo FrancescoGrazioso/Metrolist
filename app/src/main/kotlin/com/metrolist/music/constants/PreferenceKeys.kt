@@ -165,6 +165,20 @@ val ScrobbleDelayPercentKey = floatPreferencesKey("scrobbleDelayPercent")
 val ScrobbleMinSongDurationKey = intPreferencesKey("scrobbleMinSongDuration")
 val ScrobbleDelaySecondsKey = intPreferencesKey("scrobbleDelaySeconds")
 
+// Spotify Integration
+val EnableSpotifyKey = booleanPreferencesKey("enableSpotify")
+val SpotifyAccessTokenKey = stringPreferencesKey("spotifyAccessToken")
+val SpotifyRefreshTokenKey = stringPreferencesKey("spotifyRefreshToken")
+val SpotifyTokenExpiryKey = longPreferencesKey("spotifyTokenExpiry")
+val SpotifyUsernameKey = stringPreferencesKey("spotifyUsername")
+val SpotifyUserIdKey = stringPreferencesKey("spotifyUserId")
+val MusicSourceKey = stringPreferencesKey("musicSource")
+
+enum class MusicSource {
+    YOUTUBE_MUSIC,
+    SPOTIFY,
+}
+
 val ChipSortTypeKey = stringPreferencesKey("chipSortType")
 val SongSortTypeKey = stringPreferencesKey("songSortType")
 val SongSortDescendingKey = booleanPreferencesKey("songSortDescending")
