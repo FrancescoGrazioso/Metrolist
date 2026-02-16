@@ -22,6 +22,11 @@ import io.ktor.client.statement.bodyAsText
 import io.ktor.http.HttpStatusCode
 import io.ktor.serialization.kotlinx.json.json
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonNull
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.jsonObject
 
 /**
  * Spotify Web API client for retrieving user data (playlists, tracks, recommendations).
@@ -142,6 +147,20 @@ object Spotify {
         }
     }
 
+    // --- Top Artists ---
+
+    suspend fun topArtists(
+        timeRange: String = "medium_term",
+        limit: Int = 50,
+        offset: Int = 0,
+    ): Result<SpotifyPaging<SpotifyArtist>> = runCatching {
+        authenticatedGet("me/top/artists") {
+            parameter("time_range", timeRange)
+            parameter("limit", limit)
+            parameter("offset", offset)
+        }
+    }
+
     // --- Recommendations ---
 
     suspend fun recommendations(
@@ -160,15 +179,78 @@ object Spotify {
 
     // --- Search ---
 
+    /**
+     * Search uses manual JSON parsing to handle null items in paging arrays.
+     * The Spotify search API can return null elements for deleted/unavailable content,
+     * which would cause deserialization failures with standard typed parsing.
+     */
     suspend fun search(
         query: String,
         types: List<String> = listOf("track"),
         limit: Int = 20,
         offset: Int = 0,
     ): Result<SpotifySearchResult> = runCatching {
-        authenticatedGet("search") {
+        val token = accessToken ?: throw SpotifyException(401, "Not authenticated")
+        log("D", "API GET search (token: ${token.take(8)}...)")
+        val response = client.get("search") {
+            header("Authorization", "Bearer $token")
             parameter("q", query)
             parameter("type", types.joinToString(","))
+            parameter("limit", limit)
+            parameter("offset", offset)
+        }
+        log("D", "API GET search -> ${response.status.value}")
+        if (response.status == HttpStatusCode.Unauthorized) {
+            throw SpotifyException(401, "Token expired or invalid")
+        }
+        if (response.status.value !in 200..299) {
+            val body = response.bodyAsText()
+            log("E", "API GET search FAILED: ${response.status.value} - ${body.take(200)}")
+            throw SpotifyException(response.status.value, "Spotify API error ${response.status.value}: $body")
+        }
+
+        val rawJson = response.bodyAsText()
+        val sanitized = sanitizeSearchResponse(rawJson)
+        json.decodeFromString<SpotifySearchResult>(sanitized)
+    }
+
+    /**
+     * Removes null elements from all "items" arrays in the search response JSON.
+     * Spotify can return null entries for deleted/unavailable content.
+     */
+    private fun sanitizeSearchResponse(rawJson: String): String {
+        val root = json.parseToJsonElement(rawJson).jsonObject
+        val cleaned = buildJsonObject {
+            for ((key, value) in root) {
+                if (value is JsonObject) {
+                    put(key, sanitizePagingObject(value))
+                } else {
+                    put(key, value)
+                }
+            }
+        }
+        return cleaned.toString()
+    }
+
+    private fun sanitizePagingObject(paging: JsonObject): JsonObject {
+        return buildJsonObject {
+            for ((key, value) in paging) {
+                if (key == "items" && value is JsonArray) {
+                    put(key, JsonArray(value.filterNot { it is JsonNull }))
+                } else {
+                    put(key, value)
+                }
+            }
+        }
+    }
+
+    // --- Browse ---
+
+    suspend fun newReleases(
+        limit: Int = 20,
+        offset: Int = 0,
+    ): Result<NewReleasesResponse> = runCatching {
+        authenticatedGet("browse/new-releases") {
             parameter("limit", limit)
             parameter("offset", offset)
         }
@@ -210,4 +292,9 @@ data class ArtistTopTracksResponse(
 @kotlinx.serialization.Serializable
 data class RelatedArtistsResponse(
     val artists: List<SpotifyArtist> = emptyList(),
+)
+
+@kotlinx.serialization.Serializable
+data class NewReleasesResponse(
+    val albums: SpotifyPaging<SpotifyAlbum>? = null,
 )

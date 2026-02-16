@@ -169,6 +169,8 @@ val ScrobbleDelaySecondsKey = intPreferencesKey("scrobbleDelaySeconds")
 
 // Spotify Integration
 val EnableSpotifyKey = booleanPreferencesKey("enableSpotify")
+val UseSpotifySearchKey = booleanPreferencesKey("useSpotifySearch")
+val UseSpotifyHomeKey = booleanPreferencesKey("useSpotifyHome")
 val SpotifyAccessTokenKey = stringPreferencesKey("spotifyAccessToken")
 val SpotifyRefreshTokenKey = stringPreferencesKey("spotifyRefreshToken")
 val SpotifyTokenExpiryKey = longPreferencesKey("spotifyTokenExpiry")

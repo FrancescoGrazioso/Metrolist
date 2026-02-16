@@ -5,8 +5,8 @@ import kotlinx.serialization.Serializable
 
 @Serializable
 data class SpotifyPlaylist(
-    val id: String,
-    val name: String,
+    val id: String = "",
+    val name: String = "",
     val description: String? = null,
     val images: List<SpotifyImage> = emptyList(),
     val owner: SpotifyPlaylistOwner? = null,
@@ -19,7 +19,7 @@ data class SpotifyPlaylist(
 
 @Serializable
 data class SpotifyPlaylistOwner(
-    val id: String,
+    val id: String = "",
     @SerialName("display_name") val displayName: String? = null,
     val uri: String? = null,
 )

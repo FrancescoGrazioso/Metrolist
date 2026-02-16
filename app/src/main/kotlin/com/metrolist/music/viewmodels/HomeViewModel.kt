@@ -24,6 +24,7 @@ import com.metrolist.innertube.models.filterYoutubeShorts
 import com.metrolist.innertube.pages.ExplorePage
 import com.metrolist.innertube.pages.HomePage
 import com.metrolist.innertube.utils.completed
+import com.metrolist.music.constants.EnableSpotifyKey
 import com.metrolist.music.constants.HideExplicitKey
 import com.metrolist.music.constants.HideVideoSongsKey
 import com.metrolist.music.constants.HideYoutubeShortsKey
@@ -31,6 +32,10 @@ import com.metrolist.music.constants.InnerTubeCookieKey
 import com.metrolist.music.constants.QuickPicks
 import com.metrolist.music.constants.QuickPicksKey
 import com.metrolist.music.constants.ShowWrappedCardKey
+import com.metrolist.music.constants.SpotifyAccessTokenKey
+import com.metrolist.music.constants.SpotifyRefreshTokenKey
+import com.metrolist.music.constants.SpotifyTokenExpiryKey
+import com.metrolist.music.constants.UseSpotifyHomeKey
 import com.metrolist.music.constants.WrappedSeenKey
 import com.metrolist.music.db.MusicDatabase
 import com.metrolist.music.db.entities.Album
@@ -39,13 +44,17 @@ import com.metrolist.music.db.entities.Song
 import com.metrolist.music.db.entities.SpeedDialItem
 import com.metrolist.music.extensions.filterVideoSongs
 import com.metrolist.music.extensions.toEnum
+import com.metrolist.music.models.SectionType
 import com.metrolist.music.models.SimilarRecommendation
+import com.metrolist.music.models.SpotifyHomeSection
 import com.metrolist.music.ui.screens.wrapped.WrappedAudioService
 import com.metrolist.music.ui.screens.wrapped.WrappedManager
 import com.metrolist.music.utils.SyncUtils
 import com.metrolist.music.utils.dataStore
 import com.metrolist.music.utils.get
 import com.metrolist.music.utils.reportException
+import com.metrolist.spotify.Spotify
+import com.metrolist.spotify.SpotifyAuth
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Dispatchers
@@ -58,6 +67,9 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
+import timber.log.Timber
 import java.time.LocalDate
 import javax.inject.Inject
 import kotlin.random.Random
@@ -231,6 +243,17 @@ class HomeViewModel @Inject constructor(
 
     val accountName = MutableStateFlow("Guest")
     val accountImageUrl = MutableStateFlow<String?>(null)
+
+    // Spotify home sections: populated when UseSpotifyHomeKey is enabled
+    val spotifyHomeSections = MutableStateFlow<List<SpotifyHomeSection>?>(null)
+    val useSpotifyHome: StateFlow<Boolean> = context.dataStore.data.map { prefs ->
+        val enabled = prefs[EnableSpotifyKey] ?: false
+        val useForHome = prefs[UseSpotifyHomeKey] ?: false
+        val hasToken = (prefs[SpotifyAccessTokenKey] ?: "").isNotEmpty()
+        enabled && useForHome && hasToken
+    }.distinctUntilChanged().stateIn(viewModelScope, SharingStarted.Lazily, false)
+
+    private val spotifyRefreshMutex = Mutex()
 
 	val showWrappedCard: StateFlow<Boolean> = context.dataStore.data.map { prefs ->
         val showWrappedPref = prefs[ShowWrappedCardKey] ?: false
@@ -476,8 +499,31 @@ class HomeViewModel @Inject constructor(
                 }.onFailure { reportException(it) }
             }
 
-            if (YouTube.cookie != null) {
-                launch(Dispatchers.IO) { loadAccountPlaylists() }
+        similarRecommendations.value = (artistRecommendations + songRecommendations + albumRecommendations).shuffled()
+
+        // Load remote content: Spotify or YouTube depending on preference
+        if (useSpotifyHome.value && ensureSpotifyAuth()) {
+            loadSpotifyHomeSections(hideExplicit)
+        } else {
+            spotifyHomeSections.value = null
+
+            YouTube.home().onSuccess { page ->
+                homePage.value = page.copy(
+                    sections = page.sections.mapNotNull { section ->
+                        val filteredItems = section.items.filterExplicit(hideExplicit).filterVideoSongs(hideVideoSongs).filterYoutubeShorts(hideYoutubeShorts)
+                        if (filteredItems.isEmpty()) null else section.copy(items = filteredItems)
+                    }
+                )
+            }.onFailure {
+                reportException(it)
+            }
+
+            YouTube.explore().onSuccess { page ->
+                explorePage.value = page.copy(
+                    newReleaseAlbums = page.newReleaseAlbums.filterExplicit(hideExplicit)
+                )
+            }.onFailure {
+                reportException(it)
             }
         }
 
@@ -566,6 +612,152 @@ class HomeViewModel @Inject constructor(
             similarRecommendations.value = (artistRecommendations + songRecommendations + albumRecommendations).shuffled()
             allYtItems.value = similarRecommendations.value?.flatMap { it.items }.orEmpty() +
                     homePage.value?.sections?.flatMap { it.items }.orEmpty()
+        }
+    }
+
+    private suspend fun loadSpotifyHomeSections(hideExplicit: Boolean) {
+        val sections = mutableListOf<SpotifyHomeSection>()
+
+        try {
+            // Section 1: Your Top Tracks (short term = last 4 weeks)
+            Spotify.topTracks(timeRange = "short_term", limit = 20).onSuccess { paging ->
+                val tracks = if (hideExplicit) paging.items.filter { !it.explicit } else paging.items
+                if (tracks.isNotEmpty()) {
+                    sections.add(SpotifyHomeSection(
+                        title = "spotify_top_tracks",
+                        type = SectionType.TRACKS,
+                        tracks = tracks,
+                    ))
+                }
+            }
+
+            // Section 2: Your Top Artists (medium term = last 6 months)
+            val topArtists = Spotify.topArtists(timeRange = "medium_term", limit = 10)
+                .getOrNull()?.items ?: emptyList()
+            if (topArtists.isNotEmpty()) {
+                sections.add(SpotifyHomeSection(
+                    title = "spotify_top_artists",
+                    type = SectionType.ARTISTS,
+                    artists = topArtists,
+                ))
+            }
+
+            // Section 3: "Because you like [Artist]" - top tracks from favorite artists
+            // (uses artistTopTracks which is still available)
+            val artistsForDiscovery = topArtists.take(2)
+            for (artist in artistsForDiscovery) {
+                Spotify.artistTopTracks(artist.id).onSuccess { response ->
+                    val tracks = if (hideExplicit) response.tracks.filter { !it.explicit } else response.tracks
+                    if (tracks.isNotEmpty()) {
+                        sections.add(SpotifyHomeSection(
+                            title = "spotify_because_you_like:${artist.name}",
+                            type = SectionType.TRACKS,
+                            tracks = tracks.take(10),
+                        ))
+                    }
+                }
+            }
+
+            // Section 4: Long-term Favorites (different perspective from short-term)
+            Spotify.topTracks(timeRange = "long_term", limit = 20).onSuccess { paging ->
+                val tracks = if (hideExplicit) paging.items.filter { !it.explicit } else paging.items
+                if (tracks.isNotEmpty()) {
+                    sections.add(SpotifyHomeSection(
+                        title = "spotify_made_for_you",
+                        type = SectionType.TRACKS,
+                        tracks = tracks,
+                    ))
+                }
+            }
+
+            // Section 5: Your Playlists
+            Spotify.myPlaylists(limit = 10).onSuccess { paging ->
+                if (paging.items.isNotEmpty()) {
+                    sections.add(SpotifyHomeSection(
+                        title = "spotify_your_playlists",
+                        type = SectionType.PLAYLISTS,
+                        playlists = paging.items,
+                    ))
+                }
+            }
+
+            // Section 6: New Releases
+            Spotify.newReleases(limit = 20).onSuccess { response ->
+                val albums = response.albums?.items ?: emptyList()
+                if (albums.isNotEmpty()) {
+                    sections.add(SpotifyHomeSection(
+                        title = "spotify_new_releases",
+                        type = SectionType.ALBUMS,
+                        albums = albums,
+                    ))
+                }
+            }
+
+            // Section 7: Discover (top artists from a different time range for variety)
+            Spotify.topArtists(timeRange = "long_term", limit = 10).onSuccess { paging ->
+                // Filter out artists already shown in short-term top
+                val shown = topArtists.map { it.id }.toSet()
+                val newArtists = paging.items.filter { it.id !in shown }
+                if (newArtists.isNotEmpty()) {
+                    sections.add(SpotifyHomeSection(
+                        title = "spotify_discover",
+                        type = SectionType.ARTISTS,
+                        artists = newArtists,
+                    ))
+                }
+            }
+        } catch (e: Exception) {
+            Timber.e(e, "HomeVM: Failed to load Spotify home sections")
+            reportException(e)
+        }
+
+        spotifyHomeSections.value = sections.ifEmpty { null }
+
+        // Clear YouTube-specific content when using Spotify home
+        homePage.value = null
+        explorePage.value = null
+    }
+
+    private suspend fun ensureSpotifyAuth(): Boolean {
+        val settings = context.dataStore.data.first()
+        val accessToken = settings[SpotifyAccessTokenKey] ?: ""
+        val expiry = settings[SpotifyTokenExpiryKey] ?: 0L
+
+        if (accessToken.isEmpty()) return false
+
+        if (System.currentTimeMillis() < expiry) {
+            Spotify.accessToken = accessToken
+            return true
+        }
+
+        return spotifyRefreshMutex.withLock {
+            val freshSettings = context.dataStore.data.first()
+            val freshToken = freshSettings[SpotifyAccessTokenKey] ?: ""
+            val freshExpiry = freshSettings[SpotifyTokenExpiryKey] ?: 0L
+
+            if (freshToken.isNotEmpty() && System.currentTimeMillis() < freshExpiry) {
+                Spotify.accessToken = freshToken
+                return@withLock true
+            }
+
+            val refreshToken = freshSettings[SpotifyRefreshTokenKey] ?: ""
+            if (refreshToken.isEmpty() || !SpotifyAuth.isInitialized()) return@withLock false
+
+            SpotifyAuth.refreshToken(refreshToken).fold(
+                onSuccess = { token ->
+                    Spotify.accessToken = token.accessToken
+                    context.dataStore.edit { prefs ->
+                        prefs[SpotifyAccessTokenKey] = token.accessToken
+                        prefs[SpotifyTokenExpiryKey] = System.currentTimeMillis() + (token.expiresIn * 1000L)
+                        token.refreshToken?.let { prefs[SpotifyRefreshTokenKey] = it }
+                    }
+                    true
+                },
+                onFailure = { e ->
+                    Timber.e(e, "HomeVM: Spotify token refresh failed")
+                    false
+                },
+            )
         }
     }
 
