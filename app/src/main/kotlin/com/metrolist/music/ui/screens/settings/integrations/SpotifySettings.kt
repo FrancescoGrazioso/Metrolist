@@ -36,6 +36,8 @@ import com.metrolist.music.constants.SpotifyRefreshTokenKey
 import com.metrolist.music.constants.SpotifyTokenExpiryKey
 import com.metrolist.music.constants.SpotifyUserIdKey
 import com.metrolist.music.constants.SpotifyUsernameKey
+import com.metrolist.music.constants.UseSpotifyHomeKey
+import com.metrolist.music.constants.UseSpotifySearchKey
 import com.metrolist.music.ui.component.IconButton
 import com.metrolist.music.ui.component.PreferenceEntry
 import com.metrolist.music.ui.component.PreferenceGroupTitle
@@ -127,6 +129,29 @@ fun SpotifySettings(
         )
 
         if (isLoggedIn && enableSpotify) {
+            val (useSpotifySearch, onUseSpotifySearchChange) = rememberPreference(
+                key = UseSpotifySearchKey,
+                defaultValue = false,
+            )
+            val (useSpotifyHome, onUseSpotifyHomeChange) = rememberPreference(
+                key = UseSpotifyHomeKey,
+                defaultValue = false,
+            )
+
+            SwitchPreference(
+                title = { Text(stringResource(R.string.spotify_use_for_search)) },
+                description = stringResource(R.string.spotify_use_for_search_description),
+                checked = useSpotifySearch,
+                onCheckedChange = onUseSpotifySearchChange,
+            )
+
+            SwitchPreference(
+                title = { Text(stringResource(R.string.spotify_use_for_home)) },
+                description = stringResource(R.string.spotify_use_for_home_description),
+                checked = useSpotifyHome,
+                onCheckedChange = onUseSpotifyHomeChange,
+            )
+
             PreferenceGroupTitle(
                 title = stringResource(R.string.information),
             )

@@ -15,7 +15,7 @@ data class SpotifyUser(
 
 @Serializable
 data class SpotifyImage(
-    val url: String,
+    val url: String = "",
     val height: Int? = null,
     val width: Int? = null,
 )

@@ -138,6 +138,10 @@ import com.metrolist.music.playback.queues.LocalAlbumRadio
 import com.metrolist.music.playback.queues.YouTubeAlbumRadio
 import com.metrolist.music.playback.queues.YouTubeQueue
 import com.metrolist.music.R
+import com.metrolist.music.models.SectionType
+import com.metrolist.music.playback.SpotifyYouTubeMapper
+import com.metrolist.music.playback.queues.SpotifyQueue
+import com.metrolist.music.ui.component.YouTubeListItem
 import com.metrolist.music.ui.component.AlbumGridItem
 import com.metrolist.music.ui.component.ArtistGridItem
 import com.metrolist.music.ui.component.ChipsRow
@@ -146,6 +150,11 @@ import com.metrolist.music.ui.component.LocalBottomSheetPageState
 import com.metrolist.music.ui.component.LocalMenuState
 import com.metrolist.music.ui.component.NavigationTitle
 import com.metrolist.music.ui.component.RandomizeGridItem
+import com.metrolist.music.ui.component.SpotifyAlbumSectionRow
+import com.metrolist.music.ui.component.SpotifyArtistSectionRow
+import com.metrolist.music.ui.component.SpotifyPlaylistSectionRow
+import com.metrolist.music.ui.component.SpotifyTrackSectionRow
+import com.metrolist.music.ui.component.resolveSpotifySectionTitle
 import com.metrolist.music.ui.component.shimmer.GridItemPlaceHolder
 import com.metrolist.music.ui.component.shimmer.ShimmerHost
 import com.metrolist.music.ui.component.shimmer.TextPlaceholder
@@ -582,6 +591,10 @@ fun HomeScreen(
     val allYtItems by viewModel.allYtItems.collectAsState()
     val speedDialItems by viewModel.speedDialItems.collectAsState()
     val selectedChip by viewModel.selectedChip.collectAsState()
+
+    val spotifyHomeSections by viewModel.spotifyHomeSections.collectAsState()
+    val isSpotifyHome by viewModel.useSpotifyHome.collectAsState()
+    val spotifyMapper = remember { SpotifyYouTubeMapper(database) }
 
     val isLoading: Boolean by viewModel.isLoading.collectAsState()
     val isMoodAndGenresLoading = isLoading && explorePage?.moodAndGenres == null
@@ -1822,6 +1835,64 @@ fun HomeScreen(
                                             }
                                         }
                                     }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // Spotify Home Sections (shown when Spotify home is active)
+                if (isSpotifyHome && spotifyHomeSections != null) {
+                    spotifyHomeSections?.forEachIndexed { index, section ->
+                        item(key = "spotify_section_title_$index") {
+                            NavigationTitle(
+                                title = resolveSpotifySectionTitle(section),
+                                modifier = Modifier.animateItem()
+                            )
+                        }
+
+                        item(key = "spotify_section_content_$index") {
+                            when (section.type) {
+                                SectionType.TRACKS -> {
+                                    SpotifyTrackSectionRow(
+                                        tracks = section.tracks,
+                                        horizontalItemWidth = horizontalLazyGridItemWidth,
+                                        isPlaying = isPlaying,
+                                        currentMediaId = mediaMetadata?.id,
+                                        onTrackClick = { track ->
+                                            playerConnection.playQueue(
+                                                SpotifyQueue(
+                                                    initialTrack = track,
+                                                    mapper = spotifyMapper,
+                                                )
+                                            )
+                                        },
+                                        onTrackLongClick = { },
+                                        modifier = Modifier.animateItem(),
+                                    )
+                                }
+                                SectionType.ARTISTS -> {
+                                    SpotifyArtistSectionRow(
+                                        artists = section.artists,
+                                        onArtistClick = { },
+                                        modifier = Modifier.animateItem(),
+                                    )
+                                }
+                                SectionType.ALBUMS -> {
+                                    SpotifyAlbumSectionRow(
+                                        albums = section.albums,
+                                        onAlbumClick = { },
+                                        modifier = Modifier.animateItem(),
+                                    )
+                                }
+                                SectionType.PLAYLISTS -> {
+                                    SpotifyPlaylistSectionRow(
+                                        playlists = section.playlists,
+                                        onPlaylistClick = { playlist ->
+                                            navController.navigate("spotify_playlist/${playlist.id}")
+                                        },
+                                        modifier = Modifier.animateItem(),
+                                    )
                                 }
                             }
                         }

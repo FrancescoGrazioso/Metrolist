@@ -5,8 +5,8 @@ import kotlinx.serialization.Serializable
 
 @Serializable
 data class SpotifyTrack(
-    val id: String,
-    val name: String,
+    val id: String = "",
+    val name: String = "",
     val artists: List<SpotifySimpleArtist> = emptyList(),
     val album: SpotifySimpleAlbum? = null,
     @SerialName("duration_ms") val durationMs: Int = 0,
@@ -21,14 +21,14 @@ data class SpotifyTrack(
 @Serializable
 data class SpotifySimpleArtist(
     val id: String? = null,
-    val name: String,
+    val name: String = "",
     val uri: String? = null,
 )
 
 @Serializable
 data class SpotifySimpleAlbum(
-    val id: String,
-    val name: String,
+    val id: String = "",
+    val name: String = "",
     val images: List<SpotifyImage> = emptyList(),
     @SerialName("release_date") val releaseDate: String? = null,
     @SerialName("album_type") val albumType: String? = null,

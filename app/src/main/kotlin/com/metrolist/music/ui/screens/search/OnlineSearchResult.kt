@@ -83,6 +83,7 @@ import com.metrolist.music.constants.NavigationBarHeight
 import com.metrolist.music.constants.PauseSearchHistoryKey
 import com.metrolist.music.db.entities.SearchHistory
 import com.metrolist.music.models.toMediaMetadata
+import com.metrolist.music.playback.queues.SpotifyQueue
 import com.metrolist.music.playback.queues.YouTubeQueue
 import com.metrolist.music.ui.component.ChipsRow
 import com.metrolist.music.ui.component.EmptyPlaceholder
@@ -96,6 +97,9 @@ import com.metrolist.music.ui.menu.YouTubeArtistMenu
 import com.metrolist.music.ui.menu.YouTubePlaylistMenu
 import com.metrolist.music.ui.menu.YouTubeSongMenu
 import com.metrolist.music.utils.rememberPreference
+import com.metrolist.music.utils.isSpotifyId
+import com.metrolist.music.utils.stripSpotifyPrefix
+import com.metrolist.music.utils.toSpotifyTrackStub
 import com.metrolist.music.viewmodels.OnlineSearchViewModel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -122,6 +126,7 @@ fun OnlineSearchResult(
     val focusRequester = remember { FocusRequester() }
 
     var isSearchFocused by remember { mutableStateOf(false) }
+    val isSpotifySearch by viewModel.isSpotifySearch.collectAsState()
 
     val pauseSearchHistory by rememberPreference(PauseSearchHistoryKey, defaultValue = false)
 
@@ -143,7 +148,8 @@ fun OnlineSearchResult(
     var query by rememberSaveable(stateSaver = TextFieldValue.Saver) {
         mutableStateOf(TextFieldValue(decodedQuery, TextRange(decodedQuery.length)))
     }
- 
+
+
     val onSearch: (String) -> Unit = remember {
         { searchQuery ->
             if (searchQuery.isNotEmpty()) {
@@ -173,17 +179,21 @@ fun OnlineSearchResult(
     }
 
     val searchFilter by viewModel.filter.collectAsState()
+    val spotifyFilterValue by viewModel.spotifyFilter.collectAsState()
     val searchSummary = viewModel.summaryPage
-    val itemsPage by remember(searchFilter) {
+
+    val itemsPage by remember(searchFilter, spotifyFilterValue, isSpotifySearch) {
         derivedStateOf {
-            searchFilter?.value?.let {
-                viewModel.viewStateMap[it]
+            if (isSpotifySearch) {
+                spotifyFilterValue?.let { viewModel.viewStateMap[it] }
+            } else {
+                searchFilter?.value?.let { viewModel.viewStateMap[it] }
             }
         }
     }
-    
-    // Suggestion states
 
+    // Determine active filter state for display
+    val hasActiveFilter = if (isSpotifySearch) spotifyFilterValue != null else searchFilter != null
 
     LaunchedEffect(lazyListState) {
         snapshotFlow {
@@ -255,6 +265,17 @@ fun OnlineSearchResult(
                             is SongItem -> {
                                 if (item.id == mediaMetadata?.id) {
                                     playerConnection.togglePlayPause()
+                                } else if (item.id.isSpotifyId()) {
+                                    // Spotify search result: create SpotifyQueue
+                                    val spotifyTrack = item.toSpotifyTrackStub()
+                                    if (spotifyTrack != null) {
+                                        playerConnection.playQueue(
+                                            SpotifyQueue(
+                                                initialTrack = spotifyTrack,
+                                                mapper = viewModel.spotifyYouTubeMapper,
+                                            )
+                                        )
+                                    }
                                 } else {
                                     playerConnection.playQueue(
                                         YouTubeQueue(
@@ -265,9 +286,27 @@ fun OnlineSearchResult(
                                 }
                             }
 
-                            is AlbumItem -> navController.navigate("album/${item.id}")
-                            is ArtistItem -> navController.navigate("artist/${item.id}")
-                            is PlaylistItem -> navController.navigate("online_playlist/${item.id}")
+                            is AlbumItem -> {
+                                if (item.id.isSpotifyId()) {
+                                    // Spotify albums don't have a detail page yet; no-op for now
+                                } else {
+                                    navController.navigate("album/${item.id}")
+                                }
+                            }
+                            is ArtistItem -> {
+                                if (item.id.isSpotifyId()) {
+                                    // Spotify artists don't have a detail page yet; no-op for now
+                                } else {
+                                    navController.navigate("artist/${item.id}")
+                                }
+                            }
+                            is PlaylistItem -> {
+                                if (item.id.isSpotifyId()) {
+                                    navController.navigate("spotify_playlist/${item.id.stripSpotifyPrefix()}")
+                                } else {
+                                    navController.navigate("online_playlist/${item.id}")
+                                }
+                            }
                         }
                     },
                     onLongClick = longClick,
@@ -290,7 +329,7 @@ fun OnlineSearchResult(
             },
             placeholder = {
                 Text(
-                    text = stringResource(R.string.search_yt_music),
+                    text = if (isSpotifySearch) stringResource(R.string.search) else stringResource(R.string.search_yt_music),
                     style = MaterialTheme.typography.bodyLarge,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -325,20 +364,20 @@ fun OnlineSearchResult(
                 imeAction = ImeAction.Search
             ),
             keyboardActions = KeyboardActions(
-                onSearch = { 
+                onSearch = {
                     onSearch(query.text)
                 }
             ),
             singleLine = true,
             shape = RoundedCornerShape(28.dp),
             colors = OutlinedTextFieldDefaults.colors(
-                focusedContainerColor = if (pureBlack) 
-                    MaterialTheme.colorScheme.surface 
-                else 
+                focusedContainerColor = if (pureBlack)
+                    MaterialTheme.colorScheme.surface
+                else
                     MaterialTheme.colorScheme.surfaceContainerHigh,
-                unfocusedContainerColor = if (pureBlack) 
-                    MaterialTheme.colorScheme.surface 
-                else 
+                unfocusedContainerColor = if (pureBlack)
+                    MaterialTheme.colorScheme.surface
+                else
                     MaterialTheme.colorScheme.surfaceContainerHigh,
                 focusedBorderColor = Color.Transparent,
                 unfocusedBorderColor = Color.Transparent
@@ -359,33 +398,55 @@ fun OnlineSearchResult(
             Column(
                 modifier = Modifier.fillMaxWidth()
             ) {
-            ChipsRow(
-                chips = listOf(
-                    null to stringResource(R.string.filter_all),
-                    FILTER_SONG to stringResource(R.string.filter_songs),
-                    FILTER_VIDEO to stringResource(R.string.filter_videos),
-                    FILTER_ALBUM to stringResource(R.string.filter_albums),
-                    FILTER_ARTIST to stringResource(R.string.filter_artists),
-                    FILTER_COMMUNITY_PLAYLIST to stringResource(R.string.filter_community_playlists),
-                    FILTER_FEATURED_PLAYLIST to stringResource(R.string.filter_featured_playlists),
-                ),
-                currentValue = searchFilter,
-                onValueUpdate = {
-                    if (viewModel.filter.value != it) {
-                        viewModel.filter.value = it
-                    }
-                    coroutineScope.launch {
-                        lazyListState.animateScrollToItem(0)
-                    }
-                },
-                modifier = Modifier.fillMaxWidth()
-            )
+                if (isSpotifySearch) {
+                    // Spotify filter chips: All, Tracks, Albums, Artists, Playlists
+                    ChipsRow(
+                        chips = listOf(
+                            null to stringResource(R.string.filter_all),
+                            "track" to stringResource(R.string.filter_songs),
+                            "album" to stringResource(R.string.filter_albums),
+                            "artist" to stringResource(R.string.filter_artists),
+                            "playlist" to stringResource(R.string.filter_playlists),
+                        ),
+                        currentValue = spotifyFilterValue,
+                        onValueUpdate = { newFilter ->
+                            viewModel.spotifyFilter.value = newFilter
+                            coroutineScope.launch {
+                                lazyListState.animateScrollToItem(0)
+                            }
+                        },
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                } else {
+                    // YouTube filter chips
+                    ChipsRow(
+                        chips = listOf(
+                            null to stringResource(R.string.filter_all),
+                            FILTER_SONG to stringResource(R.string.filter_songs),
+                            FILTER_VIDEO to stringResource(R.string.filter_videos),
+                            FILTER_ALBUM to stringResource(R.string.filter_albums),
+                            FILTER_ARTIST to stringResource(R.string.filter_artists),
+                            FILTER_COMMUNITY_PLAYLIST to stringResource(R.string.filter_community_playlists),
+                            FILTER_FEATURED_PLAYLIST to stringResource(R.string.filter_featured_playlists),
+                        ),
+                        currentValue = searchFilter,
+                        onValueUpdate = {
+                            if (viewModel.filter.value != it) {
+                                viewModel.filter.value = it
+                            }
+                            coroutineScope.launch {
+                                lazyListState.animateScrollToItem(0)
+                            }
+                        },
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
 
             LazyColumn(
                 state = lazyListState,
                 modifier = Modifier.fillMaxWidth()
             ) {
-                if (searchFilter == null) {
+                if (!hasActiveFilter) {
                     searchSummary?.summaries?.forEach { summary ->
                         item {
                             NavigationTitle(summary.title)
@@ -433,7 +494,7 @@ fun OnlineSearchResult(
                     }
                 }
 
-                if (searchFilter == null && searchSummary == null || searchFilter != null && itemsPage == null) {
+                if (!hasActiveFilter && searchSummary == null || hasActiveFilter && itemsPage == null) {
                     item {
                         ShimmerHost {
                             repeat(8) {
@@ -464,4 +525,3 @@ fun OnlineSearchResult(
         }
     }
 }
-

@@ -5,8 +5,8 @@ import kotlinx.serialization.Serializable
 
 @Serializable
 data class SpotifyAlbum(
-    val id: String,
-    val name: String,
+    val id: String = "",
+    val name: String = "",
     @SerialName("album_type") val albumType: String? = null,
     val artists: List<SpotifySimpleArtist> = emptyList(),
     val images: List<SpotifyImage> = emptyList(),

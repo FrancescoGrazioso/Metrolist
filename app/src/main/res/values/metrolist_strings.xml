@@ -364,6 +364,17 @@
     <string name="spotify_client_id_missing">Spotify Client ID not configured</string>
     <string name="spotify_no_tracks">No tracks found</string>
     <string name="spotify_mapping_info">The first time you play a song from Spotify, there may be a short delay while the app matches it to a YouTube Music equivalent. Subsequent plays will be instant thanks to local caching.</string>
+    <string name="spotify_use_for_search">Use Spotify for search</string>
+    <string name="spotify_use_for_search_description">Search results will come from Spotify instead of YouTube Music</string>
+    <string name="spotify_use_for_home">Use Spotify for home</string>
+    <string name="spotify_use_for_home_description">Home screen will show personalized content from Spotify</string>
+    <string name="spotify_top_tracks">Your Top Tracks</string>
+    <string name="spotify_top_artists">Your Top Artists</string>
+    <string name="spotify_made_for_you">All-Time Favorites</string>
+    <string name="spotify_discover">More Artists You Love</string>
+    <string name="spotify_your_playlists">Your Playlists</string>
+    <string name="spotify_new_releases">New Releases</string>
+    <string name="spotify_because_you_like">Because you like %s</string>
 
     <string name="details_desc">View the song\'s information</string>
     <string name="edit_desc">Change the title or artist</string>
