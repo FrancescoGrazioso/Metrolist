@@ -101,6 +101,7 @@ import com.metrolist.music.utils.isSpotifyId
 import com.metrolist.music.utils.stripSpotifyPrefix
 import com.metrolist.music.utils.toSpotifyTrackStub
 import com.metrolist.music.viewmodels.OnlineSearchViewModel
+import com.metrolist.innertube.YouTube
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import java.net.URLDecoder
@@ -288,14 +289,27 @@ fun OnlineSearchResult(
 
                             is AlbumItem -> {
                                 if (item.id.isSpotifyId()) {
-                                    // Spotify albums don't have a detail page yet; no-op for now
+                                    coroutineScope.launch {
+                                        val searchQuery = "${item.title} ${item.artists?.firstOrNull()?.name.orEmpty()}"
+                                        val ytResult = YouTube.search(searchQuery, YouTube.SearchFilter.FILTER_ALBUM).getOrNull()
+                                        val ytAlbum = ytResult?.items?.firstOrNull { it is AlbumItem }
+                                        if (ytAlbum != null) {
+                                            navController.navigate("album/${ytAlbum.id}")
+                                        }
+                                    }
                                 } else {
                                     navController.navigate("album/${item.id}")
                                 }
                             }
                             is ArtistItem -> {
                                 if (item.id.isSpotifyId()) {
-                                    // Spotify artists don't have a detail page yet; no-op for now
+                                    coroutineScope.launch {
+                                        val ytResult = YouTube.search(item.title, YouTube.SearchFilter.FILTER_ARTIST).getOrNull()
+                                        val ytArtist = ytResult?.items?.firstOrNull { it is ArtistItem }
+                                        if (ytArtist != null) {
+                                            navController.navigate("artist/${ytArtist.id}")
+                                        }
+                                    }
                                 } else {
                                     navController.navigate("artist/${item.id}")
                                 }
