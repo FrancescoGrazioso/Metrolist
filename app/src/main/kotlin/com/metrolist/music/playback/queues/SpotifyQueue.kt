@@ -7,6 +7,7 @@ package com.metrolist.music.playback.queues
 
 import androidx.media3.common.MediaItem
 import com.metrolist.music.models.MediaMetadata
+import com.metrolist.music.playback.SpotifyRecommendationEngine
 import com.metrolist.music.playback.SpotifyYouTubeMapper
 import com.metrolist.spotify.Spotify
 import com.metrolist.spotify.models.SpotifyTrack
@@ -18,11 +19,20 @@ import kotlinx.coroutines.withContext
 import timber.log.Timber
 
 /**
- * Queue implementation that builds a radio-like queue from Spotify artist top tracks.
- * Uses artistTopTracks (still available) instead of the deprecated recommendations endpoint.
+ * Queue implementation that builds a personalized radio-like queue using the
+ * [SpotifyRecommendationEngine].
+ *
+ * The engine builds a user taste profile from Spotify top tracks/artists,
+ * then generates recommendations by combining seed-artist relevance, genre
+ * similarity, user affinity, and popularity matching — with diversification
+ * to avoid monotony.
+ *
+ * If the engine fails (e.g. network issues), falls back to a basic queue
+ * built from the seed artist's top tracks.
  *
  * Optimized for fast playback start: only the initial track is resolved in
- * [getInitialStatus]. Subsequent tracks are resolved progressively in [nextPage] batches.
+ * [getInitialStatus]. Subsequent tracks are resolved progressively in
+ * [nextPage] batches.
  */
 class SpotifyQueue(
     private val initialTrack: SpotifyTrack,
@@ -49,48 +59,67 @@ class SpotifyQueue(
             )
         }
 
-        // Build queue from artist top tracks (avoids deprecated recommendations endpoint)
         try {
-            val artistIds = initialTrack.artists.mapNotNull { it.id }.take(2)
-            val seenIds = mutableSetOf(initialTrack.id)
+            // Use the recommendation engine for a personalized queue
+            val recommendations = SpotifyRecommendationEngine.getRecommendations(initialTrack)
 
-            for (artistId in artistIds) {
-                val topTracks = Spotify.artistTopTracks(artistId).getOrNull()
-                if (topTracks != null) {
-                    val newTracks = topTracks.tracks.filter { it.id !in seenIds }
-                    queuedTracks.addAll(newTracks)
-                    seenIds.addAll(newTracks.map { it.id })
-                    Timber.d("SpotifyQueue: Got ${newTracks.size} tracks from artist $artistId")
-                }
+            if (recommendations.isNotEmpty()) {
+                queuedTracks.addAll(recommendations)
+                Timber.d(
+                    "SpotifyQueue: Engine produced ${recommendations.size} recommendations " +
+                        "for '${initialTrack.name}'"
+                )
+            } else {
+                // Engine returned nothing — fall back to basic queue
+                Timber.w("SpotifyQueue: Engine returned empty, falling back to basic queue")
+                buildFallbackQueue()
             }
-
-            // If we also have an album, get other tracks from the same album
-            initialTrack.album?.id?.let { albumId ->
-                val album = Spotify.album(albumId).getOrNull()
-                if (album != null) {
-                    val albumTracks = album.tracks?.items
-                        ?.filter { it.id.isNotEmpty() && it.id !in seenIds }
-                        ?: emptyList()
-                    queuedTracks.addAll(albumTracks)
-                    seenIds.addAll(albumTracks.map { it.id })
-                    Timber.d("SpotifyQueue: Got ${albumTracks.size} tracks from album $albumId")
-                }
-            }
-
-            // Shuffle for variety
-            queuedTracks.shuffle()
         } catch (e: Exception) {
-            Timber.e(e, "SpotifyQueue: Failed to build queue")
+            Timber.e(e, "SpotifyQueue: Engine failed, falling back to basic queue")
+            buildFallbackQueue()
         }
 
-        Timber.d("SpotifyQueue: Resolved initial track '${initialTrack.name}' instantly, " +
-            "${queuedTracks.size} tracks queued for resolution")
+        Timber.d(
+            "SpotifyQueue: Resolved initial track '${initialTrack.name}' instantly, " +
+                "${queuedTracks.size} tracks queued for resolution"
+        )
 
         Queue.Status(
             title = null,
             items = listOf(initialMediaItem),
             mediaItemIndex = 0,
         )
+    }
+
+    /**
+     * Basic fallback queue: artist top tracks + same album, shuffled.
+     * Used when the recommendation engine is unavailable.
+     */
+    private suspend fun buildFallbackQueue() {
+        val seenIds = mutableSetOf(initialTrack.id)
+
+        for (artistId in initialTrack.artists.mapNotNull { it.id }.take(2)) {
+            val topTracks = Spotify.artistTopTracks(artistId).getOrNull()
+            if (topTracks != null) {
+                val newTracks = topTracks.tracks.filter {
+                    it.id.isNotEmpty() && it.id !in seenIds
+                }
+                queuedTracks.addAll(newTracks)
+                seenIds.addAll(newTracks.map { it.id })
+            }
+        }
+
+        initialTrack.album?.id?.let { albumId ->
+            val album = Spotify.album(albumId).getOrNull()
+            album?.tracks?.items
+                ?.filter { it.id.isNotEmpty() && it.id !in seenIds }
+                ?.let { albumTracks ->
+                    queuedTracks.addAll(albumTracks)
+                    seenIds.addAll(albumTracks.map { it.id })
+                }
+        }
+
+        queuedTracks.shuffle()
     }
 
     override fun hasNextPage(): Boolean =
@@ -105,8 +134,10 @@ class SpotifyQueue(
         val batch = queuedTracks.subList(resolveOffset, end)
         resolveOffset = end
 
-        Timber.d("SpotifyQueue: Resolving batch of ${batch.size} tracks " +
-            "(offset=$resolveOffset/${queuedTracks.size})")
+        Timber.d(
+            "SpotifyQueue: Resolving batch of ${batch.size} tracks " +
+                "(offset=$resolveOffset/${queuedTracks.size})"
+        )
 
         coroutineScope {
             batch.map { track -> async { mapper.resolveToMediaItem(track) } }
