@@ -23,9 +23,13 @@ import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.material3.Card
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.pulltorefresh.PullToRefreshDefaults.Indicator
 import androidx.compose.material3.pulltorefresh.pullToRefresh
 import androidx.compose.material3.pulltorefresh.rememberPullToRefreshState
@@ -83,6 +87,8 @@ import com.metrolist.music.ui.menu.PlaylistMenu
 import com.metrolist.music.utils.rememberEnumPreference
 import com.metrolist.music.utils.rememberPreference
 import com.metrolist.music.viewmodels.LibraryMixViewModel
+import com.metrolist.music.viewmodels.SpotifyViewModel
+import com.metrolist.spotify.SpotifyMapper
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.text.Collator
@@ -96,12 +102,24 @@ fun LibraryMixScreen(
     navController: NavController,
     filterContent: @Composable () -> Unit,
     viewModel: LibraryMixViewModel = hiltViewModel(),
+    spotifyViewModel: SpotifyViewModel = hiltViewModel(),
 ) {
     val menuState = LocalMenuState.current
     val haptic = LocalHapticFeedback.current
     val playerConnection = LocalPlayerConnection.current ?: return
     val isPlaying by playerConnection.isEffectivelyPlaying.collectAsState()
     val mediaMetadata by playerConnection.mediaMetadata.collectAsState()
+
+    val isSpotifyActive by spotifyViewModel.isSpotifyActive.collectAsState()
+    val spotifyPlaylists by spotifyViewModel.spotifyPlaylists.collectAsState()
+    val spotifyLikedSongsTotal by spotifyViewModel.likedSongsTotal.collectAsState()
+    val needsSpotifyReLogin by spotifyViewModel.needsReLogin.collectAsState()
+
+    LaunchedEffect(isSpotifyActive) {
+        if (isSpotifyActive) {
+            spotifyViewModel.loadAll()
+        }
+    }
 
     var viewType by rememberEnumPreference(AlbumViewTypeKey, LibraryViewType.GRID)
     val (sortType, onSortTypeChange) = rememberEnumPreference(
@@ -406,6 +424,98 @@ fun LibraryMixScreen(
                         }
                     }
 
+                    if (needsSpotifyReLogin) {
+                        item(key = "spotify_relogin_banner") {
+                            Card(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 16.dp, vertical = 8.dp),
+                                colors = androidx.compose.material3.CardDefaults.cardColors(
+                                    containerColor = MaterialTheme.colorScheme.errorContainer,
+                                ),
+                            ) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
+                                ) {
+                                    Icon(
+                                        painterResource(R.drawable.spotify),
+                                        contentDescription = null,
+                                        tint = MaterialTheme.colorScheme.onErrorContainer,
+                                    )
+                                    Spacer(modifier = Modifier.padding(horizontal = 8.dp))
+                                    Text(
+                                        text = stringResource(R.string.spotify_session_expired),
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        color = MaterialTheme.colorScheme.onErrorContainer,
+                                    )
+                                    Spacer(modifier = Modifier.weight(1f))
+                                    TextButton(
+                                        onClick = {
+                                            navController.navigate("settings/spotify/login")
+                                        },
+                                    ) {
+                                        Text(
+                                            text = stringResource(R.string.spotify_relogin),
+                                            color = MaterialTheme.colorScheme.onErrorContainer,
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    if (isSpotifyActive && spotifyLikedSongsTotal > 0) {
+                        item(key = "spotify_liked_songs") {
+                            PlaylistListItem(
+                                playlist = Playlist(
+                                    playlist = PlaylistEntity(
+                                        id = "spotify_liked_songs",
+                                        name = stringResource(R.string.spotify_liked_songs),
+                                        remoteSongCount = spotifyLikedSongsTotal,
+                                    ),
+                                    songCount = spotifyLikedSongsTotal,
+                                    songThumbnails = emptyList(),
+                                ),
+                                autoPlaylist = true,
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clickable {
+                                        navController.navigate("spotify_liked_songs")
+                                    }
+                                    .animateItem(),
+                            )
+                        }
+                    }
+
+                    if (isSpotifyActive && spotifyPlaylists.isNotEmpty()) {
+                        items(
+                            items = spotifyPlaylists,
+                            key = { "spotify_${it.id}" },
+                            contentType = { CONTENT_TYPE_PLAYLIST },
+                        ) { spotifyPlaylist ->
+                            val thumbnailUrl = SpotifyMapper.getPlaylistThumbnail(spotifyPlaylist)
+                            PlaylistListItem(
+                                playlist = Playlist(
+                                    playlist = PlaylistEntity(
+                                        id = "spotify_${spotifyPlaylist.id}",
+                                        name = spotifyPlaylist.name,
+                                        thumbnailUrl = thumbnailUrl,
+                                        remoteSongCount = spotifyPlaylist.tracks?.total,
+                                    ),
+                                    songCount = spotifyPlaylist.tracks?.total ?: 0,
+                                    songThumbnails = listOfNotNull(thumbnailUrl),
+                                ),
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clickable {
+                                        navController.navigate("spotify_playlist/${spotifyPlaylist.id}")
+                                    }
+                                    .animateItem(),
+                            )
+                        }
+                    }
+
                     items(
                         items = allItems.distinctBy { it.id },
                         key = { it.id },
@@ -677,6 +787,103 @@ fun LibraryMixScreen(
                                             navController.navigate("auto_playlist/uploaded")
                                         }
                                         .animateItem(),
+                            )
+                        }
+                    }
+
+                    if (needsSpotifyReLogin) {
+                        item(
+                            key = "spotify_relogin_banner",
+                            span = { GridItemSpan(maxLineSpan) },
+                        ) {
+                            Card(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 16.dp, vertical = 8.dp),
+                                colors = androidx.compose.material3.CardDefaults.cardColors(
+                                    containerColor = MaterialTheme.colorScheme.errorContainer,
+                                ),
+                            ) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
+                                ) {
+                                    Icon(
+                                        painterResource(R.drawable.spotify),
+                                        contentDescription = null,
+                                        tint = MaterialTheme.colorScheme.onErrorContainer,
+                                    )
+                                    Spacer(modifier = Modifier.padding(horizontal = 8.dp))
+                                    Text(
+                                        text = stringResource(R.string.spotify_session_expired),
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        color = MaterialTheme.colorScheme.onErrorContainer,
+                                    )
+                                    Spacer(modifier = Modifier.weight(1f))
+                                    TextButton(
+                                        onClick = {
+                                            navController.navigate("settings/spotify/login")
+                                        },
+                                    ) {
+                                        Text(
+                                            text = stringResource(R.string.spotify_relogin),
+                                            color = MaterialTheme.colorScheme.onErrorContainer,
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    if (isSpotifyActive && spotifyLikedSongsTotal > 0) {
+                        item(key = "spotify_liked_songs") {
+                            PlaylistGridItem(
+                                playlist = Playlist(
+                                    playlist = PlaylistEntity(
+                                        id = "spotify_liked_songs",
+                                        name = stringResource(R.string.spotify_liked_songs),
+                                        remoteSongCount = spotifyLikedSongsTotal,
+                                    ),
+                                    songCount = spotifyLikedSongsTotal,
+                                    songThumbnails = emptyList(),
+                                ),
+                                fillMaxWidth = true,
+                                autoPlaylist = true,
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clickable {
+                                        navController.navigate("spotify_liked_songs")
+                                    }
+                                    .animateItem(),
+                            )
+                        }
+                    }
+
+                    if (isSpotifyActive && spotifyPlaylists.isNotEmpty()) {
+                        items(
+                            items = spotifyPlaylists,
+                            key = { "spotify_${it.id}" },
+                            contentType = { CONTENT_TYPE_PLAYLIST },
+                        ) { spotifyPlaylist ->
+                            val thumbnailUrl = SpotifyMapper.getPlaylistThumbnail(spotifyPlaylist)
+                            PlaylistGridItem(
+                                playlist = Playlist(
+                                    playlist = PlaylistEntity(
+                                        id = "spotify_${spotifyPlaylist.id}",
+                                        name = spotifyPlaylist.name,
+                                        thumbnailUrl = thumbnailUrl,
+                                        remoteSongCount = spotifyPlaylist.tracks?.total,
+                                    ),
+                                    songCount = spotifyPlaylist.tracks?.total ?: 0,
+                                    songThumbnails = listOfNotNull(thumbnailUrl),
+                                ),
+                                fillMaxWidth = true,
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clickable {
+                                        navController.navigate("spotify_playlist/${spotifyPlaylist.id}")
+                                    }
+                                    .animateItem(),
                             )
                         }
                     }

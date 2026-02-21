@@ -2,7 +2,7 @@
   "formatVersion": 1,
   "database": {
     "version": 33,
-    "identityHash": "bd72668b1e47bd29fc4195bfc7b85064",
+    "identityHash": "762ca9e73cf7b4f0da3bc5939658b2d0",
     "entities": [
       {
         "tableName": "song",
@@ -1231,6 +1231,54 @@
             "id"
           ]
         }
+      },
+      {
+        "tableName": "spotify_match",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`spotifyId` TEXT NOT NULL, `youtubeId` TEXT NOT NULL, `title` TEXT NOT NULL, `artist` TEXT NOT NULL, `matchScore` REAL NOT NULL, `cachedAt` INTEGER NOT NULL, PRIMARY KEY(`spotifyId`))",
+        "fields": [
+          {
+            "fieldPath": "spotifyId",
+            "columnName": "spotifyId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "youtubeId",
+            "columnName": "youtubeId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "title",
+            "columnName": "title",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "artist",
+            "columnName": "artist",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "matchScore",
+            "columnName": "matchScore",
+            "affinity": "REAL",
+            "notNull": true
+          },
+          {
+            "fieldPath": "cachedAt",
+            "columnName": "cachedAt",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "spotifyId"
+          ]
+        }
       }
     ],
     "views": [
@@ -1249,7 +1297,7 @@
     ],
     "setupQueries": [
       "CREATE TABLE IF NOT EXISTS room_master_table (id INTEGER PRIMARY KEY,identity_hash TEXT)",
-      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, 'bd72668b1e47bd29fc4195bfc7b85064')"
+      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, '762ca9e73cf7b4f0da3bc5939658b2d0')"
     ]
   }
 }
