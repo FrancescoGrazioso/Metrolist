@@ -60,6 +60,8 @@ The name "Meld" reflects the core idea: **melding** two music platforms into a s
 <a href="https://github.com/FrancescoGrazioso/Meld/releases/latest/download/Meld.apk"><img src="https://github.com/machiav3lli/oandbackupx/blob/034b226cea5c1b30eb4f6a6f313e4dadcbb0ece4/badge_github.png" alt="Get it on GitHub" height="82"></a>
 </div>
 
+> **First time here?** Tap the badge above or go to the [Releases page](https://github.com/FrancescoGrazioso/Meld/releases), then download the **Meld.apk** file and open it on your Android device. You may need to allow installation from unknown sources in your phone's settings.
+
 ## How the Spotify Integration Works
 
 Meld connects to your Spotify account via OAuth2 (PKCE flow) to access your listening data. Here's what happens under the hood:
@@ -79,15 +81,15 @@ Meld connects to your Spotify account via OAuth2 (PKCE flow) to access your list
 
 ### Spotify Integration
 
-1. Go to [developer.spotify.com/dashboard](https://developer.spotify.com/dashboard) and log in with your Spotify account
-2. Create a new app (any name/description will work)
-3. In the app settings, add `meld://spotify/callback` as a **Redirect URI**
-4. Copy the **Client ID** from your app's dashboard
-5. In Meld, go to **Settings → Integrations → Spotify** and paste your Client ID
-6. Tap **Login** and authorize with your Spotify account
-7. Enable "Use Spotify for Search" and/or "Use Spotify for Home" as desired
+1. Go to [developer.spotify.com/dashboard](https://developer.spotify.com/dashboard) and log in with your **regular Spotify account** (free or Premium — both work). This automatically gives you access to the developer dashboard; there is no separate sign-up.
+2. Create a new app (any name/description will work). When asked for **Redirect URIs**, enter: `meld://spotify/callback`
+3. Copy the **Client ID** from your app's dashboard
+4. In Meld, go to **Settings → Integrations → Spotify** and paste your Client ID
+5. Tap **Login** and authorize with your Spotify account
+6. **Important:** After logging in, enable **"Use Spotify for Search"** and/or **"Use Spotify for Home"** in the same settings screen — these are off by default
+7. Go back to the home screen and **pull down to refresh**. Your Spotify playlists, top tracks, and recommendations should appear within a few seconds.
 
-> **Note:** Each user needs their own Spotify Client ID. This is free and takes about 2 minutes. A Spotify Developer account is the same as your regular Spotify account — no Premium required.
+> **Note:** Each user needs their own Spotify Client ID. This is free and takes about 2 minutes. You do **not** need Spotify Premium — any Spotify account can create a developer app.
 
 ### Building from source
 
@@ -98,6 +100,32 @@ For GitHub Actions builds, add these secrets to your repository:
 - `SPOTIFY_CLIENT_ID` *(optional)* — bundled as default for your builds
 
 ## FAQ
+
+### Q: How do I download and install Meld?
+
+Go to the [latest release](https://github.com/FrancescoGrazioso/Meld/releases/latest) and download the **Meld.apk** file. Open it on your Android device — you may need to allow "Install from unknown sources" in your phone's settings when prompted. You do **not** need to download the source code files.
+
+### Q: I set up Spotify but my playlists aren't showing
+
+After logging in with Spotify, make sure you've enabled **"Use Spotify for Home"** and/or **"Use Spotify for Search"** in **Settings → Integrations → Spotify**. These are off by default. Then go back to the home screen and **pull down to refresh**. It can take a few seconds for your content to load the first time.
+
+### Q: I can't create a Spotify Developer app / "Only Premium members can use Spotify for Developers"
+
+This is not the case — **any Spotify account** (free or Premium) can create a developer app. Just go to [developer.spotify.com/dashboard](https://developer.spotify.com/dashboard) and log in with your regular Spotify credentials. If you see an error, try logging out and back in, or use a different browser.
+
+### Q: Songs aren't playing / playback isn't working
+
+If songs aren't playing after tapping them, try the following:
+1. Wait a moment — the first playback after launch can take a few seconds while the player initializes
+2. Check your internet connection
+3. Try playing a different song
+4. Force-close and reopen the app
+
+In most cases, playback starts working on its own after a brief delay.
+
+### Q: Does Meld work with Bluetooth headphones / AirPods?
+
+Yes. Meld streams audio through YouTube Music's infrastructure like any other music player. It works with any audio output device including Bluetooth headphones, AirPods, car stereos, and speakers.
 
 ### Q: Why isn't Meld showing in Android Auto?
 
