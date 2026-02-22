@@ -103,13 +103,15 @@ class App : Application(), SingletonImageLoader.Factory {
             secret = BuildConfig.LASTFM_SECRET.takeIf { it.isNotEmpty() } ?: ""
         )
 
-        // Initialize Spotify Auth with Client ID from BuildConfig
-        val spotifyClientId = BuildConfig.SPOTIFY_CLIENT_ID.takeIf { it.isNotEmpty() } ?: ""
+        // Initialize Spotify Auth: prefer user-provided Client ID from DataStore, fall back to BuildConfig
+        val userClientId = settings[SpotifyClientIdKey] ?: ""
+        val builtInClientId = BuildConfig.SPOTIFY_CLIENT_ID.takeIf { it.isNotEmpty() } ?: ""
+        val spotifyClientId = userClientId.ifEmpty { builtInClientId }
         if (spotifyClientId.isNotEmpty()) {
             SpotifyAuth.initialize(spotifyClientId)
-            Timber.d("SpotifyAuth initialized with client ID: ${spotifyClientId.take(8)}...")
+            Timber.d("SpotifyAuth initialized with client ID: ${spotifyClientId.take(8)}... (source: ${if (userClientId.isNotEmpty()) "user" else "BuildConfig"})")
         } else {
-            Timber.w("SpotifyAuth NOT initialized - no SPOTIFY_CLIENT_ID in BuildConfig")
+            Timber.w("SpotifyAuth NOT initialized - no Client ID available (set one in Settings > Spotify)")
         }
 
         // Wire up Spotify API logging to Timber

@@ -57,16 +57,7 @@ The name "Meld" reflects the core idea: **melding** two music platforms into a s
 ## Download
 
 <div align="center">
-<table>
-<tr>
-<td align="center">
 <a href="https://github.com/FrancescoGrazioso/Meld/releases/latest/download/Meld.apk"><img src="https://github.com/machiav3lli/oandbackupx/blob/034b226cea5c1b30eb4f6a6f313e4dadcbb0ece4/badge_github.png" alt="Get it on GitHub" height="82"></a>
-</td>
-<td align="center">
-<a href="https://apps.obtainium.imranr.dev/redirect?r=obtainium://add/https://github.com/FrancescoGrazioso/Meld/"><img src="https://github.com/ImranR98/Obtainium/blob/main/assets/graphics/badge_obtainium.png" alt="Get it on Obtainium" height="50"></a>
-</td>
-</tr>
-</table>
 </div>
 
 ## How the Spotify Integration Works
@@ -88,22 +79,23 @@ Meld connects to your Spotify account via OAuth2 (PKCE flow) to access your list
 
 ### Spotify Integration
 
-1. Create a Spotify app at [developer.spotify.com](https://developer.spotify.com/dashboard)
-2. Add `meld://spotify/callback` as a Redirect URI in your app settings
-3. In Meld, go to **Settings → Integrations → Spotify** and enter your Client ID
-4. Log in with your Spotify account
-5. Enable "Use Spotify for Search" and/or "Use Spotify for Home" as desired
+1. Go to [developer.spotify.com/dashboard](https://developer.spotify.com/dashboard) and log in with your Spotify account
+2. Create a new app (any name/description will work)
+3. In the app settings, add `meld://spotify/callback` as a **Redirect URI**
+4. Copy the **Client ID** from your app's dashboard
+5. In Meld, go to **Settings → Integrations → Spotify** and paste your Client ID
+6. Tap **Login** and authorize with your Spotify account
+7. Enable "Use Spotify for Search" and/or "Use Spotify for Home" as desired
 
-### GitHub Secrets (for building from source)
+> **Note:** Each user needs their own Spotify Client ID. This is free and takes about 2 minutes. A Spotify Developer account is the same as your regular Spotify account — no Premium required.
 
-If building from source with GitHub Actions:
+### Building from source
 
-1. Go to your fork's repository settings
-2. Navigate to **Settings → Secrets and variables → Actions**
-3. Add the following secrets:
-   - `LASTFM_API_KEY`: Your Last.fm API key
-   - `LASTFM_SECRET`: Your Last.fm secret key
-4. Get your Last.fm API credentials from: https://www.last.fm/api/account/create
+If you prefer to build from source, you can set `SPOTIFY_CLIENT_ID` in `local.properties` to have it bundled at compile time. Users of the pre-built APK can enter their Client ID directly in the app settings.
+
+For GitHub Actions builds, add these secrets to your repository:
+- `LASTFM_API_KEY` / `LASTFM_SECRET` — from [last.fm/api/account/create](https://www.last.fm/api/account/create)
+- `SPOTIFY_CLIENT_ID` *(optional)* — bundled as default for your builds
 
 ## FAQ
 

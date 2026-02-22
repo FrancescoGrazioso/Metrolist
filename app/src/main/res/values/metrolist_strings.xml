@@ -373,6 +373,17 @@
 
     <!-- Spotify -->
     <string name="spotify_integration">Spotify Integration</string>
+    <string name="spotify_client_id">Spotify Client ID</string>
+    <string name="spotify_client_id_description">Enter your Spotify app Client ID. Create one at developer.spotify.com</string>
+    <string name="spotify_client_id_hint">Paste your Client ID here</string>
+    <string name="spotify_client_id_help_url">https://developer.spotify.com/dashboard</string>
+    <string name="spotify_client_id_setup_guide">How to get a Client ID</string>
+    <string name="spotify_client_id_setup_step1">1. Go to developer.spotify.com and log in</string>
+    <string name="spotify_client_id_setup_step2">2. Create a new app</string>
+    <string name="spotify_client_id_setup_step3">3. Add meld://spotify/callback as Redirect URI</string>
+    <string name="spotify_client_id_setup_step4">4. Copy the Client ID and paste it here</string>
+    <string name="spotify_client_id_required">A Client ID is required to connect to Spotify</string>
+    <string name="spotify_open_dashboard">Open Spotify Dashboard</string>
     <string name="spotify_login">Log in with Spotify</string>
     <string name="spotify_login_description">Connect your Spotify account to load playlists and liked songs</string>
     <string name="spotify_not_logged_in">Not logged in</string>
