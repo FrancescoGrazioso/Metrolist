@@ -962,17 +962,21 @@ class SyncUtils @Inject constructor(
                     database.withTransaction {
                         database.clearPlaylist(playlistId)
                         songs.forEachIndexed { idx, song ->
-                            if (database.song(song.id).firstOrNull() == null) {
+                            if (database.getSongByIdBlocking(song.id) == null) {
                                 database.insert(song)
                             }
-                            database.insert(
-                                PlaylistSongMap(
-                                    songId = song.id,
-                                    playlistId = playlistId,
-                                    position = idx,
-                                    setVideoId = song.setVideoId
+                            if (database.songExistsBlocking(song.id)) {
+                                database.insert(
+                                    PlaylistSongMap(
+                                        songId = song.id,
+                                        playlistId = playlistId,
+                                        position = idx,
+                                        setVideoId = song.setVideoId,
+                                    ),
                                 )
-                            )
+                            } else {
+                                Timber.w("syncPlaylist: skipping song ${song.id} — failed to insert into database")
+                            }
                         }
                     }
                     Timber.d("syncPlaylist: Successfully synced playlist")

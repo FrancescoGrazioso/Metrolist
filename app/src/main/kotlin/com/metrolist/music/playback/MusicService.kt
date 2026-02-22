@@ -1242,10 +1242,11 @@ class MusicService :
                 relatedPage.songs
                     .map(SongItem::toMediaMetadata)
                     .onEach(::insert)
+                    .filter { songExistsBlocking(it.id) }
                     .map {
                         RelatedSongMap(
                             songId = mediaId,
-                            relatedSongId = it.id
+                            relatedSongId = it.id,
                         )
                     }
                     .forEach(::insert)
