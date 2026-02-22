@@ -142,16 +142,14 @@ jobs:
 
           # Name based on abi and variant
           if [ "${{ matrix.variant }}" = "gms" ]; then
-            # GMS builds get "with Google Cast" suffix
             if [ "${{ matrix.abi }}" = "universal" ]; then
-              TARGET_NAME="Metrolist-with-Google-Cast.apk"
+              TARGET_NAME="Meld-with-Google-Cast.apk"
             else
               TARGET_NAME="app-${{ matrix.abi }}-with-Google-Cast.apk"
             fi
           else
-            # FOSS builds keep original names
             if [ "${{ matrix.abi }}" = "universal" ]; then
-              TARGET_NAME="Metrolist.apk"
+              TARGET_NAME="Meld.apk"
             else
               TARGET_NAME="app-${{ matrix.abi }}-release.apk"
             fi
@@ -165,7 +163,7 @@ jobs:
       - name: Upload Signed APKs
         uses: actions/upload-artifact@v6
         with:
-          name: ${{ matrix.variant == 'gms' && (matrix.abi == 'universal' && 'Metrolist-with-Google-Cast' || format('app-{0}-with-Google-Cast', matrix.abi)) || (matrix.abi == 'universal' && 'Metrolist' || format('app-{0}-release', matrix.abi)) }}
+          name: ${{ matrix.variant == 'gms' && (matrix.abi == 'universal' && 'Meld-with-Google-Cast' || format('app-{0}-with-Google-Cast', matrix.abi)) || (matrix.abi == 'universal' && 'Meld' || format('app-{0}-release', matrix.abi)) }}
           path: app/build/outputs/apk/${{ matrix.abi }}${{ matrix.variant == 'foss' && 'Foss' || 'Gms' }}/release/out/*.apk
 
   create-release:
