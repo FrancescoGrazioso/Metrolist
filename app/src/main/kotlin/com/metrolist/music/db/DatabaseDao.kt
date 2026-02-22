@@ -61,6 +61,7 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.runBlocking
+import timber.log.Timber
 import java.text.Collator
 import java.time.LocalDateTime
 import java.time.ZoneOffset
@@ -573,6 +574,9 @@ interface DatabaseDao {
     @Query("SELECT * FROM song WHERE id = :songId LIMIT 1")
     fun getSongByIdBlocking(songId: String): Song?
 
+    @Query("SELECT EXISTS(SELECT 1 FROM song WHERE id = :songId)")
+    fun songExistsBlocking(songId: String): Boolean
+
     @Transaction
     @Query("SELECT * FROM song WHERE id IN (:songIds)")
     suspend fun getSongsByIds(songIds: List<String>): List<Song>
@@ -1006,12 +1010,16 @@ interface DatabaseDao {
     fun addSongToPlaylist(playlist: Playlist, songIds: List<String>) {
         var position = playlist.songCount
         songIds.forEach { id ->
+            if (!songExistsBlocking(id)) {
+                Timber.w("addSongToPlaylist: skipping songId=$id — not found in database")
+                return@forEach
+            }
             insert(
                 PlaylistSongMap(
                     songId = id,
                     playlistId = playlist.id,
-                    position = position++
-                )
+                    position = position++,
+                ),
             )
         }
     }
@@ -1427,7 +1435,8 @@ interface DatabaseDao {
                 if (existingSong != null) {
                     update(existingSong, it)
                 }
-            }.mapIndexed { index, song ->
+            }.filter { songExistsBlocking(it.id) }
+            .mapIndexed { index, song ->
                 SongAlbumMap(
                     songId = song.id,
                     albumId = albumPage.album.browseId,
@@ -1442,6 +1451,7 @@ interface DatabaseDao {
                     name = artist.name,
                 )
             }?.onEach(::insert)
+            ?.filter { getArtistById(it.id) != null }
             ?.mapIndexed { index, artist ->
                 AlbumArtistMap(
                     albumId = albumPage.album.browseId,
@@ -1546,7 +1556,8 @@ interface DatabaseDao {
                 if (existingSong != null) {
                     update(existingSong, it)
                 }
-            }.mapIndexed { index, song ->
+            }.filter { songExistsBlocking(it.id) }
+            .mapIndexed { index, song ->
                 SongAlbumMap(
                     songId = song.id,
                     albumId = albumPage.album.browseId,
@@ -1555,7 +1566,6 @@ interface DatabaseDao {
             }.forEach(::upsert)
 
         albumPage.album.artists?.let { artists ->
-            // Recreate album artists
             albumArtistMaps(album.id).forEach(::delete)
             artists
                 .map { artist ->
@@ -1565,6 +1575,7 @@ interface DatabaseDao {
                         name = artist.name,
                     )
                 }.onEach(::insert)
+                .filter { getArtistById(it.id) != null }
                 .mapIndexed { index, artist ->
                     AlbumArtistMap(
                         albumId = albumPage.album.browseId,
