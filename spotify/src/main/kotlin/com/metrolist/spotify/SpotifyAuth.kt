@@ -1,155 +1,91 @@
 package com.metrolist.spotify
 
-import com.metrolist.spotify.models.SpotifyToken
-import io.ktor.client.HttpClient
-import io.ktor.client.call.body
-import io.ktor.client.engine.okhttp.OkHttp
-import io.ktor.client.plugins.contentnegotiation.ContentNegotiation
-import io.ktor.client.request.forms.FormDataContent
-import io.ktor.client.request.post
-import io.ktor.client.request.setBody
-import io.ktor.client.statement.bodyAsText
-import io.ktor.http.Parameters
-import io.ktor.serialization.kotlinx.json.json
+import com.metrolist.spotify.models.SpotifyInternalToken
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
-import java.security.MessageDigest
-import java.security.SecureRandom
-import java.util.Base64
+import java.net.HttpURLConnection
+import java.net.URL
 
 /**
- * Handles Spotify OAuth2 Authorization Code flow with PKCE (Proof Key for Code Exchange).
- * This eliminates the need for a client secret, making it safe for public clients (mobile apps).
+ * Handles Spotify authentication using the web player's internal token endpoint.
+ * Uses sp_dc / sp_key cookies (extracted from WebView login) to obtain access tokens
+ * without requiring a Spotify Developer Client ID.
+ *
+ * Uses [java.net.HttpURLConnection] (Android's built-in HTTP stack) instead of
+ * OkHttp/Ktor because Spotify's Varnish CDN fingerprints TLS clients and blocks
+ * requests from non-browser HTTP libraries.
  */
 object SpotifyAuth {
-    @Volatile
-    private var clientId: String = ""
+    private const val TOKEN_URL = "https://open.spotify.com/get_access_token"
+    private const val USER_AGENT =
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36"
 
-    private const val REDIRECT_URI = "meld://spotify/callback"
-    private const val AUTH_URL = "https://accounts.spotify.com/authorize"
-    private const val TOKEN_URL = "https://accounts.spotify.com/api/token"
-
-    private val SCOPES = listOf(
-        "user-read-private",
-        "user-read-email",
-        "playlist-read-private",
-        "playlist-read-collaborative",
-        "user-library-read",
-        "user-top-read",
-    )
-
-    @Volatile
-    private var codeVerifier: String? = null
+    const val LOGIN_URL = "https://accounts.spotify.com/login?continue=https%3A%2F%2Fopen.spotify.com%2F"
+    const val LOGIN_CALLBACK_HOST = "open.spotify.com"
 
     private val json = Json {
         isLenient = true
         ignoreUnknownKeys = true
     }
 
-    private val client by lazy {
-        HttpClient(OkHttp) {
-            install(ContentNegotiation) {
-                json(json)
+    /**
+     * Fetches an internal web-player access token using session cookies.
+     * The sp_dc cookie is long-lived (~1 year) and the returned access token
+     * is valid for ~1 hour with broader permissions than the official API token.
+     */
+    suspend fun fetchAccessToken(
+        spDc: String,
+        spKey: String = "",
+    ): Result<SpotifyInternalToken> = runCatching {
+        val cookieHeader = buildString {
+            append("sp_dc=$spDc")
+            if (spKey.isNotEmpty()) {
+                append("; sp_key=$spKey")
             }
-            expectSuccess = false
-        }
-    }
-
-    fun initialize(clientId: String) {
-        this.clientId = clientId
-    }
-
-    fun isInitialized(): Boolean = clientId.isNotEmpty()
-
-    /**
-     * Generates the authorization URL that should be loaded in a WebView.
-     * Also generates and stores the PKCE code verifier internally.
-     */
-    fun getAuthorizationUrl(): String {
-        val verifier = generateCodeVerifier()
-        codeVerifier = verifier
-        val challenge = generateCodeChallenge(verifier)
-
-        return buildString {
-            append(AUTH_URL)
-            append("?client_id=$clientId")
-            append("&response_type=code")
-            append("&redirect_uri=$REDIRECT_URI")
-            append("&scope=${SCOPES.joinToString(" ")}")
-            append("&code_challenge_method=S256")
-            append("&code_challenge=$challenge")
-            append("&show_dialog=true")
-        }
-    }
-
-    /**
-     * Exchanges the authorization code for access and refresh tokens.
-     */
-    suspend fun exchangeCodeForToken(code: String): Result<SpotifyToken> = runCatching {
-        val verifier = codeVerifier
-            ?: throw IllegalStateException("No code verifier available. Call getAuthorizationUrl() first.")
-
-        val response = client.post(TOKEN_URL) {
-            setBody(FormDataContent(Parameters.build {
-                append("client_id", clientId)
-                append("grant_type", "authorization_code")
-                append("code", code)
-                append("redirect_uri", REDIRECT_URI)
-                append("code_verifier", verifier)
-            }))
         }
 
-        if (response.status.value !in 200..299) {
-            val errorBody = response.bodyAsText()
+        val url = URL("$TOKEN_URL?reason=transport&productType=web_player")
+        val body = withContext(Dispatchers.IO) {
+            val connection = url.openConnection() as HttpURLConnection
+            try {
+                connection.requestMethod = "GET"
+                connection.instanceFollowRedirects = true
+                connection.connectTimeout = 15_000
+                connection.readTimeout = 15_000
+                connection.setRequestProperty("User-Agent", USER_AGENT)
+                connection.setRequestProperty("Accept", "application/json, text/plain, */*")
+                connection.setRequestProperty("Accept-Language", "en")
+                connection.setRequestProperty("Referer", "https://open.spotify.com/")
+                connection.setRequestProperty("Sec-Fetch-Dest", "empty")
+                connection.setRequestProperty("Sec-Fetch-Mode", "cors")
+                connection.setRequestProperty("Sec-Fetch-Site", "same-origin")
+                connection.setRequestProperty("Cookie", cookieHeader)
+
+                val responseCode = connection.responseCode
+                if (responseCode !in 200..299) {
+                    val errorBody = connection.errorStream?.bufferedReader()?.use { it.readText() } ?: ""
+                    throw Spotify.SpotifyException(
+                        responseCode,
+                        "Token fetch failed (cookie may be expired): $errorBody",
+                    )
+                }
+
+                connection.inputStream.bufferedReader().use { it.readText() }
+            } finally {
+                connection.disconnect()
+            }
+        }
+
+        val token = json.decodeFromString<SpotifyInternalToken>(body)
+
+        if (token.isAnonymous || token.accessToken.isBlank()) {
             throw Spotify.SpotifyException(
-                response.status.value,
-                "Token exchange failed: $errorBody"
+                401,
+                "Received anonymous token — sp_dc cookie is invalid or expired",
             )
         }
 
-        val token: SpotifyToken = response.body()
-        codeVerifier = null
         token
-    }
-
-    /**
-     * Refreshes the access token using a refresh token.
-     */
-    suspend fun refreshToken(refreshToken: String): Result<SpotifyToken> = runCatching {
-        val response = client.post(TOKEN_URL) {
-            setBody(FormDataContent(Parameters.build {
-                append("client_id", clientId)
-                append("grant_type", "refresh_token")
-                append("refresh_token", refreshToken)
-            }))
-        }
-
-        if (response.status.value !in 200..299) {
-            val errorBody = response.bodyAsText()
-            throw Spotify.SpotifyException(
-                response.status.value,
-                "Token refresh failed: $errorBody"
-            )
-        }
-
-        response.body()
-    }
-
-    fun getRedirectUri(): String = REDIRECT_URI
-
-    /**
-     * Generates a random 128-character code verifier for PKCE.
-     */
-    private fun generateCodeVerifier(): String {
-        val bytes = ByteArray(64)
-        SecureRandom().nextBytes(bytes)
-        return Base64.getUrlEncoder().withoutPadding().encodeToString(bytes)
-    }
-
-    /**
-     * Creates a SHA-256 code challenge from the code verifier.
-     */
-    private fun generateCodeChallenge(verifier: String): String {
-        val digest = MessageDigest.getInstance("SHA-256").digest(verifier.toByteArray(Charsets.US_ASCII))
-        return Base64.getUrlEncoder().withoutPadding().encodeToString(digest)
     }
 }

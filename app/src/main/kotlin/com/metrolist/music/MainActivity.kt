@@ -136,10 +136,6 @@ import com.metrolist.music.constants.ListenTogetherInTopBarKey
 import com.metrolist.music.constants.LastSeenVersionKey
 import com.metrolist.music.constants.ListenTogetherUsernameKey
 import com.metrolist.music.constants.SpotifyAccessTokenKey
-import com.metrolist.music.constants.SpotifyRefreshTokenKey
-import com.metrolist.music.constants.SpotifyTokenExpiryKey
-import com.metrolist.music.constants.SpotifyUserIdKey
-import com.metrolist.music.constants.SpotifyUsernameKey
 import com.metrolist.music.constants.MiniPlayerBottomSpacing
 import com.metrolist.music.constants.MiniPlayerHeight
 import com.metrolist.music.constants.NavigationBarAnimationSpec
@@ -194,7 +190,7 @@ import com.metrolist.music.utils.rememberEnumPreference
 import com.metrolist.music.utils.rememberPreference
 import com.metrolist.music.utils.reportException
 import com.metrolist.spotify.Spotify
-import com.metrolist.spotify.SpotifyAuth
+
 import com.metrolist.music.utils.setAppLocale
 import com.metrolist.music.viewmodels.HomeViewModel
 import com.valentinilk.shimmer.LocalShimmerTheme
@@ -1194,45 +1190,6 @@ class MainActivity : ComponentActivity() {
         intent.data = null
         intent.removeExtra(Intent.EXTRA_TEXT)
         val coroutineScope = lifecycle.coroutineScope
-
-        // Handle Spotify OAuth callback (meld://spotify/callback?code=...)
-        if (uri.scheme == "meld" && uri.host == "spotify") {
-            val code = uri.getQueryParameter("code")
-            val error = uri.getQueryParameter("error")
-
-            if (error != null) {
-                Timber.w("Spotify auth error: $error")
-                return
-            }
-
-            if (!code.isNullOrBlank()) {
-                coroutineScope.launch(Dispatchers.IO) {
-                    SpotifyAuth.exchangeCodeForToken(code)
-                        .onSuccess { token ->
-                            dataStore.edit { prefs ->
-                                prefs[SpotifyAccessTokenKey] = token.accessToken
-                                prefs[SpotifyRefreshTokenKey] = token.refreshToken ?: ""
-                                prefs[SpotifyTokenExpiryKey] = System.currentTimeMillis() + (token.expiresIn * 1000L)
-                            }
-                            Spotify.accessToken = token.accessToken
-
-                            Spotify.me().onSuccess { user ->
-                                dataStore.edit { prefs ->
-                                    prefs[SpotifyUsernameKey] = user.displayName ?: user.id
-                                    prefs[SpotifyUserIdKey] = user.id
-                                }
-                            }.onFailure { reportException(it) }
-
-                            Timber.d("Spotify login successful")
-                        }
-                        .onFailure { exception ->
-                            Timber.e(exception, "Spotify token exchange failed")
-                            reportException(exception)
-                        }
-                }
-            }
-            return
-        }
 
         val listenCode = uri.getQueryParameter("code")
             ?: uri.getQueryParameter("room")

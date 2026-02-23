@@ -25,7 +25,8 @@ import com.metrolist.music.constants.HideExplicitKey
 import com.metrolist.music.constants.HideVideoSongsKey
 import com.metrolist.music.constants.HideYoutubeShortsKey
 import com.metrolist.music.constants.SpotifyAccessTokenKey
-import com.metrolist.music.constants.SpotifyRefreshTokenKey
+import com.metrolist.music.constants.SpotifySpDcKey
+import com.metrolist.music.constants.SpotifySpKeyKey
 import com.metrolist.music.constants.SpotifyTokenExpiryKey
 import com.metrolist.music.constants.UseSpotifySearchKey
 import com.metrolist.music.models.ItemsPage
@@ -374,16 +375,16 @@ constructor(
                 return@withLock true
             }
 
-            val refreshToken = freshSettings[SpotifyRefreshTokenKey] ?: ""
-            if (refreshToken.isEmpty() || !SpotifyAuth.isInitialized()) return@withLock false
+            val spDc = freshSettings[SpotifySpDcKey] ?: ""
+            val spKey = freshSettings[SpotifySpKeyKey] ?: ""
+            if (spDc.isEmpty()) return@withLock false
 
-            SpotifyAuth.refreshToken(refreshToken).fold(
+            SpotifyAuth.fetchAccessToken(spDc, spKey).fold(
                 onSuccess = { token ->
                     Spotify.accessToken = token.accessToken
                     context.dataStore.edit { prefs ->
                         prefs[SpotifyAccessTokenKey] = token.accessToken
-                        prefs[SpotifyTokenExpiryKey] = System.currentTimeMillis() + (token.expiresIn * 1000L)
-                        token.refreshToken?.let { prefs[SpotifyRefreshTokenKey] = it }
+                        prefs[SpotifyTokenExpiryKey] = token.accessTokenExpirationTimestampMs
                     }
                     true
                 },

@@ -103,17 +103,6 @@ class App : Application(), SingletonImageLoader.Factory {
             secret = BuildConfig.LASTFM_SECRET.takeIf { it.isNotEmpty() } ?: ""
         )
 
-        // Initialize Spotify Auth: prefer user-provided Client ID from DataStore, fall back to BuildConfig
-        val userClientId = settings[SpotifyClientIdKey] ?: ""
-        val builtInClientId = BuildConfig.SPOTIFY_CLIENT_ID.takeIf { it.isNotEmpty() } ?: ""
-        val spotifyClientId = userClientId.ifEmpty { builtInClientId }
-        if (spotifyClientId.isNotEmpty()) {
-            SpotifyAuth.initialize(spotifyClientId)
-            Timber.d("SpotifyAuth initialized with client ID: ${spotifyClientId.take(8)}... (source: ${if (userClientId.isNotEmpty()) "user" else "BuildConfig"})")
-        } else {
-            Timber.w("SpotifyAuth NOT initialized - no Client ID available (set one in Settings > Spotify)")
-        }
-
         // Wire up Spotify API logging to Timber
         Spotify.logger = { level, message ->
             when (level) {
@@ -123,25 +112,23 @@ class App : Application(), SingletonImageLoader.Factory {
             }
         }
 
-        // Restore Spotify access token from preferences
+        // Restore Spotify access token from preferences, refresh via cookie if expired
+        val spDc = settings[SpotifySpDcKey] ?: ""
+        val spKey = settings[SpotifySpKeyKey] ?: ""
         settings[SpotifyAccessTokenKey]?.takeIf { it.isNotEmpty() }?.let { token ->
             val expiry = settings[SpotifyTokenExpiryKey] ?: 0L
             if (System.currentTimeMillis() < expiry) {
                 Spotify.accessToken = token
-            } else {
-                // Token expired, attempt refresh
-                settings[SpotifyRefreshTokenKey]?.takeIf { it.isNotEmpty() }?.let { refreshToken ->
-                    applicationScope.launch(Dispatchers.IO) {
-                        SpotifyAuth.refreshToken(refreshToken).onSuccess { newToken ->
-                            Spotify.accessToken = newToken.accessToken
-                            dataStore.edit { prefs ->
-                                prefs[SpotifyAccessTokenKey] = newToken.accessToken
-                                prefs[SpotifyTokenExpiryKey] = System.currentTimeMillis() + (newToken.expiresIn * 1000L)
-                                newToken.refreshToken?.let { prefs[SpotifyRefreshTokenKey] = it }
-                            }
-                        }.onFailure { e ->
-                            Timber.e(e, "Failed to refresh Spotify token on startup")
+            } else if (spDc.isNotEmpty()) {
+                applicationScope.launch(Dispatchers.IO) {
+                    SpotifyAuth.fetchAccessToken(spDc, spKey).onSuccess { newToken ->
+                        Spotify.accessToken = newToken.accessToken
+                        dataStore.edit { prefs ->
+                            prefs[SpotifyAccessTokenKey] = newToken.accessToken
+                            prefs[SpotifyTokenExpiryKey] = newToken.accessTokenExpirationTimestampMs
                         }
+                    }.onFailure { e ->
+                        Timber.e(e, "Failed to refresh Spotify token on startup")
                     }
                 }
             }

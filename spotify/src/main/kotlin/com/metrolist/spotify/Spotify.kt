@@ -30,7 +30,7 @@ import kotlinx.serialization.json.jsonObject
 
 /**
  * Spotify Web API client for retrieving user data (playlists, tracks, recommendations).
- * Requires a valid OAuth2 access token obtained via PKCE flow.
+ * Uses an internal web-player access token obtained via sp_dc cookie authentication.
  */
 object Spotify {
     @Volatile
@@ -183,6 +183,10 @@ object Spotify {
      * Search uses manual JSON parsing to handle null items in paging arrays.
      * The Spotify search API can return null elements for deleted/unavailable content,
      * which would cause deserialization failures with standard typed parsing.
+     *
+     * If the API enforces a per-request limit lower than [limit] (e.g. 10 for
+     * Development Mode apps), this function transparently paginates to fulfill
+     * the full requested amount.
      */
     suspend fun search(
         query: String,
@@ -190,6 +194,31 @@ object Spotify {
         limit: Int = 20,
         offset: Int = 0,
     ): Result<SpotifySearchResult> = runCatching {
+        val firstPage = executeSearch(query, types, limit, offset)
+
+        val trackItems = firstPage.tracks?.items.orEmpty().toMutableList()
+        val totalAvailable = firstPage.tracks?.total ?: 0
+        var nextOffset = offset + trackItems.size
+
+        while (trackItems.size < limit && nextOffset < totalAvailable && trackItems.size < totalAvailable) {
+            val page = executeSearch(query, types, limit - trackItems.size, nextOffset)
+            val newItems = page.tracks?.items.orEmpty()
+            if (newItems.isEmpty()) break
+            trackItems.addAll(newItems)
+            nextOffset += newItems.size
+        }
+
+        SpotifySearchResult(
+            tracks = firstPage.tracks?.copy(items = trackItems),
+        )
+    }
+
+    private suspend fun executeSearch(
+        query: String,
+        types: List<String>,
+        limit: Int,
+        offset: Int,
+    ): SpotifySearchResult {
         val token = accessToken ?: throw SpotifyException(401, "Not authenticated")
         log("D", "API GET search (token: ${token.take(8)}...)")
         val response = client.get("search") {
@@ -211,7 +240,7 @@ object Spotify {
 
         val rawJson = response.bodyAsText()
         val sanitized = sanitizeSearchResponse(rawJson)
-        json.decodeFromString<SpotifySearchResult>(sanitized)
+        return json.decodeFromString<SpotifySearchResult>(sanitized)
     }
 
     /**

@@ -11,3 +11,11 @@ data class SpotifyToken(
     @SerialName("expires_in") val expiresIn: Int,
     @SerialName("refresh_token") val refreshToken: String? = null,
 )
+
+@Serializable
+data class SpotifyInternalToken(
+    val accessToken: String,
+    val accessTokenExpirationTimestampMs: Long,
+    val isAnonymous: Boolean = false,
+    val clientId: String = "",
+)
