@@ -600,6 +600,7 @@ fun HomeScreen(
 
     val spotifyHomeSections by viewModel.spotifyHomeSections.collectAsState()
     val isSpotifyHome by viewModel.useSpotifyHome.collectAsState()
+    val isSpotifyHomeOnly by viewModel.spotifyHomeOnly.collectAsState()
     val spotifyMapper = remember { SpotifyYouTubeMapper(database) }
 
     val isLoading: Boolean by viewModel.isLoading.collectAsState()
@@ -884,6 +885,7 @@ fun HomeScreen(
         randomizeHomeOrder,
         randomSeed,
         selectedChip,
+        isSpotifyHomeOnly,
         speedDialItems,
         quickPicks,
         dailyDiscover,
@@ -898,15 +900,15 @@ fun HomeScreen(
         val list = mutableListOf<HomeSection>()
         val chipActive = selectedChip != null
 
-        if (!chipActive && speedDialItems.isNotEmpty()) list.add(HomeSection.SpeedDial)
-        if (!chipActive && quickPicks?.isNotEmpty() == true) list.add(HomeSection.QuickPicks)
-        if (!chipActive && communityPlaylists?.isNotEmpty() == true) list.add(HomeSection.FromTheCommunity)
-        if (!chipActive && dailyDiscover?.isNotEmpty() == true) list.add(HomeSection.DailyDiscover)
-        if (!chipActive && keepListening?.isNotEmpty() == true) list.add(HomeSection.KeepListening)
-        if (!chipActive && accountPlaylists?.isNotEmpty() == true) list.add(HomeSection.AccountPlaylists)
-        if (!chipActive && forgottenFavorites?.isNotEmpty() == true) list.add(HomeSection.ForgottenFavorites)
+        if (!isSpotifyHomeOnly && !chipActive) {
+            if (speedDialItems.isNotEmpty()) list.add(HomeSection.SpeedDial)
+            if (quickPicks?.isNotEmpty() == true) list.add(HomeSection.QuickPicks)
+            if (communityPlaylists?.isNotEmpty() == true) list.add(HomeSection.FromTheCommunity)
+            if (dailyDiscover?.isNotEmpty() == true) list.add(HomeSection.DailyDiscover)
+            if (keepListening?.isNotEmpty() == true) list.add(HomeSection.KeepListening)
+            if (accountPlaylists?.isNotEmpty() == true) list.add(HomeSection.AccountPlaylists)
+            if (forgottenFavorites?.isNotEmpty() == true) list.add(HomeSection.ForgottenFavorites)
 
-        if (!chipActive) {
             similarRecommendations?.indices?.forEach { i ->
                 list.add(HomeSection.SimilarRecommendation(i))
             }

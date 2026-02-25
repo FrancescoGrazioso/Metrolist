@@ -398,6 +398,8 @@
     <string name="spotify_use_for_search_description">Search results will come from Spotify instead of YouTube Music</string>
     <string name="spotify_use_for_home">Use Spotify for home</string>
     <string name="spotify_use_for_home_description">Home screen will show personalized content from Spotify</string>
+    <string name="spotify_home_only">Spotify-only home</string>
+    <string name="spotify_home_only_description">Show only Spotify content on the home screen. When disabled, local content like Speed Dial and Quick Picks will also appear.</string>
     <string name="spotify_top_tracks">Your Top Tracks</string>
     <string name="spotify_top_artists">Your Top Artists</string>
     <string name="spotify_made_for_you">All-Time Favorites</string>
