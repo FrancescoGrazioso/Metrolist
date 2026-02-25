@@ -19,6 +19,7 @@ The name "Meld" reflects the core idea: **melding** two music platforms into a s
 
 - **Spotify's personalization** — Your top tracks, favorite artists, and curated playlists from Spotify drive the recommendations
 - **YouTube Music's catalog** — Access YouTube Music's vast library for streaming, including rare tracks, live performances, and remixes
+- **No setup required** — Just log in with your Spotify account directly in the app. No developer dashboard, no Client ID, no extra steps
 - **No Spotify Premium required** — Meld uses Spotify's data APIs (not streaming), so a free Spotify account is all you need
 - **Built-in recommendation engine** — A custom algorithm builds personalized queues using your Spotify listening history, without relying on deprecated API endpoints
 
@@ -27,9 +28,13 @@ The name "Meld" reflects the core idea: **melding** two music platforms into a s
 ### Spotify Integration
 - **Spotify as search source** — Search results powered by Spotify, with automatic YouTube Music matching for playback
 - **Spotify as home source** — Home screen populated with your Spotify top tracks, top artists, playlists, and new releases
+- **Spotify-only mode** — Option to hide all YouTube-based content and show exclusively Spotify-powered sections on the home screen
 - **Smart queue generation** — Custom recommendation engine that builds radio-like queues from your Spotify taste profile (top tracks/artists across 3 time ranges, genre similarity, popularity matching)
 - **Spotify library sync** — Access your Spotify playlists and liked songs directly in the app
 - **Spotify-to-YouTube matching** — Fuzzy matching algorithm with local caching for fast, accurate track resolution
+- **Spotify album browsing** — Dedicated album screen for Spotify albums with full tracklist, metadata, and one-tap playback
+- **Hybrid profile cache** — 3-tier data strategy (GraphQL → REST API → local DB) with persistent caching for instant home screen loading on app restart, automatic rate-limit handling, and parallel artist image enrichment
+- **Artist navigation** — Tap any Spotify artist on the home screen to navigate directly to their YouTube Music artist page
 
 ### Core Music Features
 - Play any song or video from YouTube Music
@@ -64,40 +69,38 @@ The name "Meld" reflects the core idea: **melding** two music platforms into a s
 
 ## How the Spotify Integration Works
 
-Meld connects to your Spotify account via OAuth2 (PKCE flow) to access your listening data. Here's what happens under the hood:
+Meld connects to your Spotify account through a built-in WebView login — no developer setup or Client ID required. Here's what happens under the hood:
 
-1. **Authentication** — You log in with your Spotify account. Meld only requests read access to your library, top items, and playlists.
-2. **Home screen** — When "Use Spotify for Home" is enabled, Meld fetches your top tracks (short/medium/long term), top artists, playlists, and new releases to build a personalized home feed.
-3. **Search** — When "Use Spotify for Search" is enabled, search queries go to Spotify's API. Results are displayed as Spotify content; clicking a song resolves it to YouTube Music for playback.
-4. **Queue generation** — When you play a Spotify-sourced song, Meld's recommendation engine builds a queue by:
+1. **Authentication** — You log in with your regular Spotify credentials (email, Google, Facebook, or Apple) directly inside the app. Meld extracts session cookies and generates access tokens using TOTP, keeping you logged in without manual token management.
+2. **Data layer** — Meld communicates with Spotify primarily through GraphQL endpoints (for playlists, liked songs, artist details, albums, new releases, and search) with REST API fallbacks for top tracks and top artists. GraphQL avoids the aggressive rate limits that affect REST endpoints.
+3. **Home screen** — When "Use Spotify for Home" is enabled, Meld builds a personalized home feed from your top tracks, top artists, playlists, and new releases. Enable "Spotify only" to hide all YouTube-based sections for a fully Spotify-driven experience.
+4. **Profile caching** — Your Spotify profile data (top tracks, top artists with images) is persisted locally and served instantly on app restart. Background network refreshes only happen when the cache is stale (6-hour TTL), keeping the home screen fast and responsive.
+5. **Search** — When "Use Spotify for Search" is enabled, search queries go through Spotify's GraphQL search. Results are displayed as Spotify content; tapping a song resolves it to YouTube Music for playback.
+6. **Queue generation** — When you play a Spotify-sourced song, Meld's recommendation engine builds a queue by:
    - Fetching top tracks from the song's artists
    - Finding genre-similar artists from your taste profile
    - Mixing in tracks from your personal top tracks pool
-   - Scoring candidates by artist affinity, genre overlap, popularity, and recency
-   - Diversifying the queue to avoid monotony
-5. **Playback** — Each Spotify track is matched to its YouTube Music equivalent using fuzzy title/artist/duration matching, then streamed via YouTube Music's infrastructure.
+   - Scoring candidates by artist affinity (30%), genre overlap (20%), source relevance (25%), recency (15%), and popularity similarity (10%)
+   - Diversifying the queue to avoid repetition (max 3 tracks per artist)
+7. **Playback** — Each Spotify track is matched to its YouTube Music equivalent using fuzzy title/artist/duration matching, then streamed via YouTube Music's infrastructure. Matched results are cached locally for instant resolution on subsequent plays.
 
 ## Setup
 
 ### Spotify Integration
 
-1. Go to [developer.spotify.com/dashboard](https://developer.spotify.com/dashboard) and log in with your **regular Spotify account** (free or Premium — both work). This automatically gives you access to the developer dashboard; there is no separate sign-up.
-2. Create a new app (any name/description will work). When asked for **Redirect URIs**, enter: `meld://spotify/callback`
-3. Copy the **Client ID** from your app's dashboard
-4. In Meld, go to **Settings → Integrations → Spotify** and paste your Client ID
-5. Tap **Login** and authorize with your Spotify account
-6. **Important:** After logging in, enable **"Use Spotify for Search"** and/or **"Use Spotify for Home"** in the same settings screen — these are off by default
-7. Go back to the home screen and **pull down to refresh**. Your Spotify playlists, top tracks, and recommendations should appear within a few seconds.
+1. In Meld, go to **Settings → Integrations → Spotify**
+2. Tap **Login** — a Spotify login page will open directly inside the app
+3. Sign in with your Spotify account (email/password, Google, Facebook, or Apple)
+4. Once logged in, enable **"Use Spotify for Search"** and/or **"Use Spotify for Home"** — these are off by default
+5. Optionally enable **"Spotify only"** to hide all YouTube-based content from the home screen
+6. Go back to the home screen and **pull down to refresh**. Your Spotify playlists, top tracks, and recommendations should appear within a few seconds.
 
-> **Note:** Each user needs their own Spotify Client ID. This is free and takes about 2 minutes. You do **not** need Spotify Premium — any Spotify account can create a developer app.
+> **Note:** No developer account, Client ID, or any external setup is required. Just log in with your regular Spotify account — free or Premium.
 
 ### Building from source
 
-If you prefer to build from source, you can set `SPOTIFY_CLIENT_ID` in `local.properties` to have it bundled at compile time. Users of the pre-built APK can enter their Client ID directly in the app settings.
-
 For GitHub Actions builds, add these secrets to your repository:
 - `LASTFM_API_KEY` / `LASTFM_SECRET` — from [last.fm/api/account/create](https://www.last.fm/api/account/create)
-- `SPOTIFY_CLIENT_ID` *(optional)* — bundled as default for your builds
 
 ## FAQ
 
@@ -105,13 +108,9 @@ For GitHub Actions builds, add these secrets to your repository:
 
 Go to the [latest release](https://github.com/FrancescoGrazioso/Meld/releases/latest) and download the **Meld.apk** file. Open it on your Android device — you may need to allow "Install from unknown sources" in your phone's settings when prompted. You do **not** need to download the source code files.
 
-### Q: I set up Spotify but my playlists aren't showing
+### Q: I logged into Spotify but my playlists aren't showing
 
-After logging in with Spotify, make sure you've enabled **"Use Spotify for Home"** and/or **"Use Spotify for Search"** in **Settings → Integrations → Spotify**. These are off by default. Then go back to the home screen and **pull down to refresh**. It can take a few seconds for your content to load the first time.
-
-### Q: I can't create a Spotify Developer app / "Only Premium members can use Spotify for Developers"
-
-This is not the case — **any Spotify account** (free or Premium) can create a developer app. Just go to [developer.spotify.com/dashboard](https://developer.spotify.com/dashboard) and log in with your regular Spotify credentials. If you see an error, try logging out and back in, or use a different browser.
+After logging in, make sure you've enabled **"Use Spotify for Home"** and/or **"Use Spotify for Search"** in **Settings → Integrations → Spotify**. These are off by default. Then go back to the home screen and **pull down to refresh**. The first load may take a few seconds; subsequent launches will be instant thanks to local caching.
 
 ### Q: Songs aren't playing / playback isn't working
 
@@ -135,7 +134,7 @@ Yes. Meld streams audio through YouTube Music's infrastructure like any other mu
 
 ### Q: Do I need Spotify Premium?
 
-No. Meld uses Spotify's Web API for data (your library, top tracks, search results) — not for audio streaming. A free Spotify account works perfectly.
+No. Meld uses Spotify for data only (your library, top tracks, search results) — not for audio streaming. Audio is streamed through YouTube Music. A free Spotify account works perfectly.
 
 ### Q: Why do some songs not match correctly?
 
