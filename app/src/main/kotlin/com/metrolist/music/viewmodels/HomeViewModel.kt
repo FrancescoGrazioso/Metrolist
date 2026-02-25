@@ -25,6 +25,7 @@ import com.metrolist.innertube.pages.ExplorePage
 import com.metrolist.innertube.pages.HomePage
 import com.metrolist.innertube.utils.completed
 import com.metrolist.music.constants.EnableSpotifyKey
+import com.metrolist.music.constants.SpotifyHomeOnlyKey
 import com.metrolist.music.constants.HideExplicitKey
 import com.metrolist.music.constants.HideVideoSongsKey
 import com.metrolist.music.constants.HideYoutubeShortsKey
@@ -247,6 +248,14 @@ class HomeViewModel @Inject constructor(
         val useForHome = prefs[UseSpotifyHomeKey] ?: false
         val hasToken = (prefs[SpotifyAccessTokenKey] ?: "").isNotEmpty()
         enabled && useForHome && hasToken
+    }.distinctUntilChanged().stateIn(viewModelScope, SharingStarted.Lazily, false)
+
+    val spotifyHomeOnly: StateFlow<Boolean> = context.dataStore.data.map { prefs ->
+        val enabled = prefs[EnableSpotifyKey] ?: false
+        val useForHome = prefs[UseSpotifyHomeKey] ?: false
+        val homeOnly = prefs[SpotifyHomeOnlyKey] ?: false
+        val hasToken = (prefs[SpotifyAccessTokenKey] ?: "").isNotEmpty()
+        enabled && useForHome && homeOnly && hasToken
     }.distinctUntilChanged().stateIn(viewModelScope, SharingStarted.Lazily, false)
 
     private val spotifyRefreshMutex = Mutex()

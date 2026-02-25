@@ -38,6 +38,7 @@ import com.metrolist.music.constants.SpotifySpKeyKey
 import com.metrolist.music.constants.SpotifyTokenExpiryKey
 import com.metrolist.music.constants.SpotifyUserIdKey
 import com.metrolist.music.constants.SpotifyUsernameKey
+import com.metrolist.music.constants.SpotifyHomeOnlyKey
 import com.metrolist.music.constants.UseSpotifyHomeKey
 import com.metrolist.music.constants.UseSpotifySearchKey
 import com.metrolist.music.ui.component.IconButton
@@ -142,6 +143,10 @@ fun SpotifySettings(
                 key = UseSpotifyHomeKey,
                 defaultValue = false,
             )
+            val (spotifyHomeOnly, onSpotifyHomeOnlyChange) = rememberPreference(
+                key = SpotifyHomeOnlyKey,
+                defaultValue = false,
+            )
 
             SwitchPreference(
                 title = { Text(stringResource(R.string.spotify_use_for_search)) },
@@ -156,6 +161,15 @@ fun SpotifySettings(
                 checked = useSpotifyHome,
                 onCheckedChange = onUseSpotifyHomeChange,
             )
+
+            if (useSpotifyHome) {
+                SwitchPreference(
+                    title = { Text(stringResource(R.string.spotify_home_only)) },
+                    description = stringResource(R.string.spotify_home_only_description),
+                    checked = spotifyHomeOnly,
+                    onCheckedChange = onSpotifyHomeOnlyChange,
+                )
+            }
 
             PreferenceGroupTitle(
                 title = stringResource(R.string.information),
