@@ -307,12 +307,19 @@ object Spotify {
      *
      * @param albumOverride When non-null, used instead of the `albumOfTrack`
      *   field (needed for album-track responses where no albumOfTrack is present).
+     * @param uriOverride When non-null, used as the track URI instead of
+     *   reading it from [trackData]. Needed when the URI lives on a wrapper
+     *   object (e.g. `track._uri`) rather than inside `track.data`.
      */
     private fun parseGqlTrack(
         trackData: JsonObject,
         albumOverride: SpotifySimpleAlbum? = null,
+        uriOverride: String? = null,
     ): SpotifyTrack {
-        val uri = trackData.str("uri") ?: ""
+        val uri = uriOverride
+            ?: trackData.str("uri")
+            ?: trackData.str("_uri")
+            ?: ""
         val trackId = uri.substringAfterLast(":")
 
         val artists =
@@ -531,8 +538,10 @@ object Spotify {
 
             val tracks =
                 content.arr("items")?.mapNotNull { elem ->
-                    val itemData = elem.jsonObject.obj("itemV2")?.obj("data") ?: return@mapNotNull null
-                    SpotifyPlaylistTrack(track = parseGqlTrack(itemData))
+                    val itemWrapper = elem.jsonObject.obj("itemV2") ?: return@mapNotNull null
+                    val itemData = itemWrapper.obj("data") ?: return@mapNotNull null
+                    val wrapperUri = itemWrapper.str("_uri") ?: itemWrapper.str("uri")
+                    SpotifyPlaylistTrack(track = parseGqlTrack(itemData, uriOverride = wrapperUri))
                 } ?: emptyList()
 
             SpotifyPaging(
@@ -571,7 +580,8 @@ object Spotify {
                 tracksData.arr("items")?.mapNotNull { elem ->
                     val trackWrapper = elem.jsonObject.obj("track") ?: return@mapNotNull null
                     val trackData = trackWrapper.obj("data") ?: return@mapNotNull null
-                    SpotifySavedTrack(track = parseGqlTrack(trackData))
+                    val wrapperUri = trackWrapper.str("_uri") ?: trackWrapper.str("uri")
+                    SpotifySavedTrack(track = parseGqlTrack(trackData, uriOverride = wrapperUri))
                 } ?: emptyList()
 
             SpotifyPaging(
@@ -669,7 +679,8 @@ object Spotify {
                     if (itemWrapper.str("__typename") != "TrackResponseWrapper") return@mapNotNull null
                     val data = itemWrapper.obj("data") ?: return@mapNotNull null
                     if (data.str("__typename") != "Track") return@mapNotNull null
-                    parseGqlTrack(data)
+                    val wrapperUri = itemWrapper.str("_uri") ?: itemWrapper.str("uri")
+                    parseGqlTrack(data, uriOverride = wrapperUri)
                 } ?: emptyList()
 
             val albumsSection = searchData.obj("albumsV2")
