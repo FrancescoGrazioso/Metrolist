@@ -23,6 +23,7 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
@@ -47,6 +48,7 @@ object SpotifyProfileCache {
     private const val TAG = "SpotifyProfileCache"
     private const val CACHE_TTL_MS = 6L * 60 * 60 * 1000 // 6 hours
     private const val REST_COOLDOWN_MS = 5L * 60 * 1000 // 5 min cooldown after 429
+    private const val REST_CALL_TIMEOUT_MS = 3000L // Max wait for a single REST call
 
     private val CACHE_KEY_TRACKS = stringPreferencesKey("spotify_profile_tracks_json")
     private val CACHE_KEY_ARTISTS = stringPreferencesKey("spotify_profile_artists_json")
@@ -170,11 +172,19 @@ object SpotifyProfileCache {
         // ── Tier 2: REST top tracks/artists (may 429, skip if recently failed) ──
         val restAvailable = System.currentTimeMillis() - lastRestFailMs > REST_COOLDOWN_MS
         if (restAvailable) {
-            try {
-                val restTracks = Spotify.topTracks(timeRange = "short_term", limit = 50)
-                restTracks.onSuccess { paging ->
+            val restTracksResult = try {
+                withTimeoutOrNull(REST_CALL_TIMEOUT_MS) {
+                    Spotify.topTracks(timeRange = "short_term", limit = 50)
+                }
+            } catch (e: Exception) {
+                Timber.w(e, "$TAG: REST topTracks failed")
+                lastRestFailMs = System.currentTimeMillis()
+                null
+            }
+
+            if (restTracksResult != null) {
+                restTracksResult.onSuccess { paging ->
                     Timber.d("$TAG: REST topTracks(short_term) returned ${paging.items.size} tracks")
-                    // REST top tracks are higher signal — prepend them
                     val merged = paging.items + tracks.filter { t -> paging.items.none { it.id == t.id } }
                     tracks.clear()
                     tracks.addAll(merged)
@@ -187,23 +197,29 @@ object SpotifyProfileCache {
                             }.restBoost = true
                         }
                     }
-                }.onFailure { e ->
-                    if (e.message?.contains("429") == true || e.message?.contains("Rate limited") == true) {
-                        Timber.w("$TAG: REST topTracks hit 429, entering cooldown")
-                        lastRestFailMs = System.currentTimeMillis()
-                    }
+                }.onFailure {
+                    Timber.w("$TAG: REST topTracks hit error, entering cooldown")
+                    lastRestFailMs = System.currentTimeMillis()
                 }
-            } catch (e: Exception) {
-                Timber.w(e, "$TAG: REST topTracks failed")
-                if (e.message?.contains("429") == true) lastRestFailMs = System.currentTimeMillis()
+            } else {
+                Timber.w("$TAG: REST topTracks timed out, entering cooldown")
+                lastRestFailMs = System.currentTimeMillis()
             }
 
             if (System.currentTimeMillis() - lastRestFailMs > REST_COOLDOWN_MS) {
-                try {
-                    val restArtists = Spotify.topArtists(timeRange = "medium_term", limit = 50)
-                    restArtists.onSuccess { paging ->
+                val restArtistsResult = try {
+                    withTimeoutOrNull(REST_CALL_TIMEOUT_MS) {
+                        Spotify.topArtists(timeRange = "medium_term", limit = 50)
+                    }
+                } catch (e: Exception) {
+                    Timber.w(e, "$TAG: REST topArtists failed")
+                    lastRestFailMs = System.currentTimeMillis()
+                    null
+                }
+
+                if (restArtistsResult != null) {
+                    restArtistsResult.onSuccess { paging ->
                         Timber.d("$TAG: REST topArtists returned ${paging.items.size} artists")
-                        // REST artists have genre data — merge them in
                         for (artist in paging.items) {
                             val acc = artistFrequency.getOrPut(artist.id) {
                                 ArtistAccumulator(artist.id, artist.name)
@@ -212,15 +228,13 @@ object SpotifyProfileCache {
                             acc.genres = artist.genres
                             acc.images = artist.images
                         }
-                    }.onFailure { e ->
-                        if (e.message?.contains("429") == true || e.message?.contains("Rate limited") == true) {
-                            Timber.w("$TAG: REST topArtists hit 429, entering cooldown")
-                            lastRestFailMs = System.currentTimeMillis()
-                        }
+                    }.onFailure {
+                        Timber.w("$TAG: REST topArtists hit error, entering cooldown")
+                        lastRestFailMs = System.currentTimeMillis()
                     }
-                } catch (e: Exception) {
-                    Timber.w(e, "$TAG: REST topArtists failed")
-                    if (e.message?.contains("429") == true) lastRestFailMs = System.currentTimeMillis()
+                } else {
+                    Timber.w("$TAG: REST topArtists timed out, entering cooldown")
+                    lastRestFailMs = System.currentTimeMillis()
                 }
             }
         } else {

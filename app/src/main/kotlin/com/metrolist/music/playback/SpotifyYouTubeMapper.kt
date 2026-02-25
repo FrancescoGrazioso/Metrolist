@@ -57,7 +57,13 @@ class SpotifyYouTubeMapper(
                 )
             )
             Timber.d("Spotify match found: ${track.name} -> ${bestMatch.id} (score: ${bestMatch.score})")
-            return@withContext buildMediaMetadata(bestMatch.id, track, bestMatch.title, bestMatch.artistName)
+            return@withContext buildMediaMetadata(
+                youtubeId = bestMatch.id,
+                spotifyTrack = track,
+                ytTitle = bestMatch.title,
+                ytArtist = bestMatch.artistName,
+                ytThumbnailUrl = bestMatch.thumbnailUrl,
+            )
         }
 
         Timber.w("No YouTube match found for Spotify track: ${track.name} by ${track.artists.firstOrNull()?.name}")
@@ -126,7 +132,12 @@ class SpotifyYouTubeMapper(
         spotifyTrack: SpotifyTrack,
         ytTitle: String,
         ytArtist: String,
+        ytThumbnailUrl: String? = null,
     ): MediaMetadata {
+        val thumbnail = SpotifyMapper.getTrackThumbnail(spotifyTrack)
+            ?: ytThumbnailUrl
+            ?: "https://i.ytimg.com/vi/$youtubeId/hqdefault.jpg"
+
         return MediaMetadata(
             id = youtubeId,
             title = ytTitle.ifEmpty { spotifyTrack.name },
@@ -136,7 +147,7 @@ class SpotifyYouTubeMapper(
                 spotifyTrack.artists.map { MediaMetadata.Artist(id = null, name = it.name) }
             },
             duration = spotifyTrack.durationMs / 1000,
-            thumbnailUrl = SpotifyMapper.getTrackThumbnail(spotifyTrack),
+            thumbnailUrl = thumbnail,
             album = spotifyTrack.album?.let {
                 MediaMetadata.Album(id = it.id, title = it.name)
             },
