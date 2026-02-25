@@ -36,6 +36,7 @@ import com.metrolist.music.ui.screens.playlist.CachePlaylistScreen
 import com.metrolist.music.ui.screens.playlist.LocalPlaylistScreen
 import com.metrolist.music.ui.screens.playlist.OnlinePlaylistScreen
 import com.metrolist.music.ui.screens.playlist.SpotifyLikedSongsScreen
+import com.metrolist.music.ui.screens.album.SpotifyAlbumScreen
 import com.metrolist.music.ui.screens.playlist.SpotifyPlaylistScreen
 import com.metrolist.music.ui.screens.playlist.TopPlaylistScreen
 import com.metrolist.music.ui.screens.search.OnlineSearchResult
@@ -184,8 +185,18 @@ fun NavGraphBuilder.navigationBuilder(
                 type = NavType.StringType
             },
         ),
-    ) {
-        AlbumScreen(navController, scrollBehavior)
+    ) { backStackEntry ->
+        val albumId = backStackEntry.arguments?.getString("albumId") ?: ""
+        if (albumId.startsWith("spotify:")) {
+            val spotifyId = albumId.removePrefix("spotify:")
+            androidx.compose.runtime.LaunchedEffect(Unit) {
+                navController.navigate("spotify_album/$spotifyId") {
+                    popUpTo("album/$albumId") { inclusive = true }
+                }
+            }
+        } else {
+            AlbumScreen(navController, scrollBehavior)
+        }
     }
 
     composable(
@@ -384,6 +395,17 @@ fun NavGraphBuilder.navigationBuilder(
         ),
     ) {
         SpotifyPlaylistScreen(navController, scrollBehavior)
+    }
+
+    composable(
+        route = "spotify_album/{albumId}",
+        arguments = listOf(
+            navArgument("albumId") {
+                type = NavType.StringType
+            },
+        ),
+    ) {
+        SpotifyAlbumScreen(navController, scrollBehavior)
     }
 
     composable("spotify_liked_songs") {

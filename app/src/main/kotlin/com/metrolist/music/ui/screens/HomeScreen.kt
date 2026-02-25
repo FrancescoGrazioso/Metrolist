@@ -1868,6 +1868,8 @@ fun HomeScreen(
                                                 SpotifyQueue(
                                                     initialTrack = track,
                                                     mapper = spotifyMapper,
+                                                    context = viewModel.context,
+                                                    database = database,
                                                 )
                                             )
                                         },
@@ -1878,14 +1880,30 @@ fun HomeScreen(
                                 SectionType.ARTISTS -> {
                                     SpotifyArtistSectionRow(
                                         artists = section.artists,
-                                        onArtistClick = { },
+                                        onArtistClick = { artist ->
+                                            scope.launch(Dispatchers.IO) {
+                                                val ytResult = YouTube.search(
+                                                    artist.name,
+                                                    YouTube.SearchFilter.FILTER_ARTIST,
+                                                ).getOrNull()
+                                                val ytArtist = ytResult?.items
+                                                    ?.firstOrNull { it is ArtistItem }
+                                                if (ytArtist != null) {
+                                                    withContext(Dispatchers.Main) {
+                                                        navController.navigate("artist/${ytArtist.id}")
+                                                    }
+                                                }
+                                            }
+                                        },
                                         modifier = Modifier.animateItem(),
                                     )
                                 }
                                 SectionType.ALBUMS -> {
                                     SpotifyAlbumSectionRow(
                                         albums = section.albums,
-                                        onAlbumClick = { },
+                                        onAlbumClick = { album ->
+                                            navController.navigate("spotify_album/${album.id}")
+                                        },
                                         modifier = Modifier.animateItem(),
                                     )
                                 }

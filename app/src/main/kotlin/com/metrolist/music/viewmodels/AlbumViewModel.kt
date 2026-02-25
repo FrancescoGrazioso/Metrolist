@@ -11,6 +11,7 @@ import androidx.lifecycle.viewModelScope
 import com.metrolist.innertube.YouTube
 import com.metrolist.innertube.models.AlbumItem
 import com.metrolist.music.db.MusicDatabase
+import com.metrolist.music.utils.isSpotifyId
 import com.metrolist.music.utils.reportException
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -37,6 +38,7 @@ constructor(
 
     init {
         viewModelScope.launch {
+            if (albumId.isSpotifyId()) return@launch
             val album = database.album(albumId).first()
             YouTube
                 .album(albumId)

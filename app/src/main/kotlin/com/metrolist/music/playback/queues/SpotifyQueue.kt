@@ -5,7 +5,9 @@
 
 package com.metrolist.music.playback.queues
 
+import android.content.Context
 import androidx.media3.common.MediaItem
+import com.metrolist.music.db.MusicDatabase
 import com.metrolist.music.models.MediaMetadata
 import com.metrolist.music.playback.SpotifyRecommendationEngine
 import com.metrolist.music.playback.SpotifyYouTubeMapper
@@ -37,6 +39,8 @@ import timber.log.Timber
 class SpotifyQueue(
     private val initialTrack: SpotifyTrack,
     private val mapper: SpotifyYouTubeMapper,
+    private val context: Context? = null,
+    private val database: MusicDatabase? = null,
     override val preloadItem: MediaMetadata? = null,
 ) : Queue {
 
@@ -61,7 +65,11 @@ class SpotifyQueue(
 
         try {
             // Use the recommendation engine for a personalized queue
-            val recommendations = SpotifyRecommendationEngine.getRecommendations(initialTrack)
+            val recommendations = SpotifyRecommendationEngine.getRecommendations(
+                seedTrack = initialTrack,
+                context = context,
+                database = database,
+            )
 
             if (recommendations.isNotEmpty()) {
                 queuedTracks.addAll(recommendations)

@@ -5,6 +5,8 @@
 
 package com.metrolist.music.playback
 
+import android.content.Context
+import com.metrolist.music.db.MusicDatabase
 import com.metrolist.spotify.Spotify
 import com.metrolist.spotify.models.SpotifyArtist
 import com.metrolist.spotify.models.SpotifyTrack
@@ -37,7 +39,7 @@ import kotlin.math.abs
  */
 object SpotifyRecommendationEngine {
 
-    private const val PROFILE_TTL_MS = 30L * 60 * 1000 // 30 minutes
+    private const val PROFILE_TTL_MS = 6L * 60 * 60 * 1000 // 6 hours (profile comes from SpotifyProfileCache)
     private const val MAX_TRACKS_PER_ARTIST = 3
     private const val TAG = "SpotifyRecEngine"
 
@@ -100,75 +102,66 @@ object SpotifyRecommendationEngine {
     }
 
     /**
-     * Builds or refreshes the user taste profile from Spotify top tracks/artists.
-     * This is the foundation of all recommendations — it captures what the user
-     * likes, weighted by recency (short_term 3x > medium_term 2x > long_term 1x).
+     * Builds or refreshes the user taste profile using SpotifyProfileCache
+     * (which handles GQL/REST/local-DB fallback internally, avoiding 429 errors).
      *
-     * The profile is cached for [PROFILE_TTL_MS] to avoid excessive API calls.
+     * The profile is cached for [PROFILE_TTL_MS] to avoid excessive rebuilds.
      */
-    suspend fun ensureProfileLoaded(): Boolean = withContext(Dispatchers.IO) {
+    suspend fun ensureProfileLoaded(
+        context: Context? = null,
+        database: MusicDatabase? = null,
+    ): Boolean = withContext(Dispatchers.IO) {
         if (System.currentTimeMillis() - lastProfileRefresh < PROFILE_TTL_MS &&
             artistAffinityMap.isNotEmpty()
         ) {
             return@withContext true
         }
 
-        Timber.d("$TAG: Building user taste profile...")
+        Timber.d("$TAG: Building user taste profile from SpotifyProfileCache...")
 
         try {
-            // Parallel fetch: 3 time ranges for tracks + 3 for artists = 6 calls
-            val (tracks, artists) = coroutineScope {
-                val trackDeferred = listOf("short_term", "medium_term", "long_term").map { range ->
-                    async {
-                        range to (Spotify.topTracks(range, limit = 50).getOrNull()?.items
-                            ?: emptyList())
-                    }
-                }
-                val artistDeferred = listOf("short_term", "medium_term", "long_term").map { range ->
-                    async {
-                        range to (Spotify.topArtists(range, limit = 50).getOrNull()?.items
-                            ?: emptyList())
-                    }
-                }
-                trackDeferred.awaitAll() to artistDeferred.awaitAll()
+            val profileTracks: List<SpotifyTrack>
+            val profileArtists: List<SpotifyArtist>
+
+            if (context != null) {
+                profileTracks = SpotifyProfileCache.getTopTracks(context, database, limit = 100)
+                profileArtists = SpotifyProfileCache.getTopArtists(context, database, limit = 50)
+            } else {
+                // No context available — try direct REST as last resort
+                val restTracks = Spotify.topTracks("medium_term", limit = 50).getOrNull()?.items
+                val restArtists = Spotify.topArtists("medium_term", limit = 50).getOrNull()?.items
+                profileTracks = restTracks ?: emptyList()
+                profileArtists = restArtists ?: emptyList()
             }
 
-            val tracksByRange = tracks.toMap()
-            val artistsByRange = artists.toMap()
+            if (profileTracks.isEmpty() && profileArtists.isEmpty()) {
+                Timber.w("$TAG: No profile data available from any source")
+                return@withContext false
+            }
 
-            // Build artist affinity map: position-weighted, time-weighted scores
+            // Build artist affinity map from position in the profile lists
             val affinityBuilder = mutableMapOf<String, Float>()
             val genreBuilder = mutableMapOf<String, MutableSet<String>>()
-            val timeWeights = mapOf("short_term" to 3.0f, "medium_term" to 2.0f, "long_term" to 1.0f)
 
-            for ((range, artistList) in artistsByRange) {
-                val weight = timeWeights[range] ?: 1.0f
-                for ((index, artist) in artistList.withIndex()) {
-                    if (artist.id.isEmpty()) continue
-                    // Position score: #1 gets 1.0, last gets ~0.02
-                    val positionScore = 1.0f - (index.toFloat() / artistList.size.coerceAtLeast(1))
-                    affinityBuilder[artist.id] =
-                        (affinityBuilder[artist.id] ?: 0f) + (positionScore * weight)
+            for ((index, artist) in profileArtists.withIndex()) {
+                if (artist.id.isEmpty()) continue
+                val positionScore = 1.0f - (index.toFloat() / profileArtists.size.coerceAtLeast(1))
+                affinityBuilder[artist.id] =
+                    (affinityBuilder[artist.id] ?: 0f) + (positionScore * 2.0f)
 
-                    // Collect genres per artist
-                    if (artist.genres.isNotEmpty()) {
-                        genreBuilder.getOrPut(artist.id) { mutableSetOf() }
-                            .addAll(artist.genres)
-                    }
+                if (artist.genres.isNotEmpty()) {
+                    genreBuilder.getOrPut(artist.id) { mutableSetOf() }
+                        .addAll(artist.genres)
                 }
             }
 
-            // Also add affinity from top tracks' artists (weaker signal but useful for
-            // artists that appear in tracks but not in the top artists list)
-            for ((range, trackList) in tracksByRange) {
-                val weight = (timeWeights[range] ?: 1.0f) * 0.5f
-                for ((index, track) in trackList.withIndex()) {
-                    val positionScore = 1.0f - (index.toFloat() / trackList.size.coerceAtLeast(1))
-                    for (artist in track.artists) {
-                        val artistId = artist.id ?: continue
-                        affinityBuilder[artistId] =
-                            (affinityBuilder[artistId] ?: 0f) + (positionScore * weight)
-                    }
+            // Add affinity from track artists (weaker signal)
+            for ((index, track) in profileTracks.withIndex()) {
+                val positionScore = 1.0f - (index.toFloat() / profileTracks.size.coerceAtLeast(1))
+                for (artist in track.artists) {
+                    val artistId = artist.id ?: continue
+                    affinityBuilder[artistId] =
+                        (affinityBuilder[artistId] ?: 0f) + (positionScore * 1.0f)
                 }
             }
 
@@ -180,30 +173,26 @@ object SpotifyRecommendationEngine {
                 affinityBuilder
             }
 
-            // Build deduplicated top track pool with time weights
+            // Build deduplicated top track pool
             val seenTrackIds = mutableSetOf<String>()
             val trackPool = mutableListOf<WeightedTrack>()
-            for (range in listOf("short_term", "medium_term", "long_term")) {
-                val weight = timeWeights[range] ?: 1.0f
-                for (track in tracksByRange[range].orEmpty()) {
-                    if (track.id.isNotEmpty() && seenTrackIds.add(track.id)) {
-                        trackPool.add(WeightedTrack(track, weight))
-                    }
+            for (track in profileTracks) {
+                if (track.id.isNotEmpty() && seenTrackIds.add(track.id)) {
+                    trackPool.add(WeightedTrack(track, 1.0f))
                 }
             }
 
-            // Capture short-term artist IDs for recency boost
-            val shortArtists = artistsByRange["short_term"]
-                ?.map { it.id }
-                ?.filter { it.isNotEmpty() }
-                ?.toSet()
-                ?: emptySet()
+            // Top artists from profile are considered "short-term" for recency boost
+            val recentArtists = profileArtists.take(10)
+                .map { it.id }
+                .filter { it.isNotEmpty() }
+                .toSet()
 
             // Commit to cache atomically
             artistAffinityMap = normalizedAffinity
             artistGenreMap = genreBuilder.mapValues { it.value.toSet() }
             topTrackPool = trackPool
-            shortTermArtistIds = shortArtists
+            shortTermArtistIds = recentArtists
             lastProfileRefresh = System.currentTimeMillis()
 
             Timber.d(
@@ -229,8 +218,10 @@ object SpotifyRecommendationEngine {
     suspend fun getRecommendations(
         seedTrack: SpotifyTrack,
         limit: Int = 50,
+        context: Context? = null,
+        database: MusicDatabase? = null,
     ): List<SpotifyTrack> = withContext(Dispatchers.IO) {
-        if (!ensureProfileLoaded()) {
+        if (!ensureProfileLoaded(context, database)) {
             Timber.w("$TAG: Profile not available, falling back to basic queue")
             return@withContext emptyList()
         }
