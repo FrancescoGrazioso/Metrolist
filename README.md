@@ -67,6 +67,14 @@ The name "Meld" reflects the core idea: **melding** two music platforms into a s
 
 > **First time here?** Tap the badge above or go to the [Releases page](https://github.com/FrancescoGrazioso/Meld/releases), then download the **Meld.apk** file and open it on your Android device. You may need to allow installation from unknown sources in your phone's settings.
 
+<div align="center">
+
+**Enjoying Meld?** Consider supporting the project
+
+<a href="https://buymeacoffee.com/francescogm"><img src="https://img.shields.io/badge/Buy%20Me%20a%20Coffee-ffdd00?style=for-the-badge&logo=buy-me-a-coffee&logoColor=black" alt="Buy Me a Coffee"></a>
+
+</div>
+
 ## How the Spotify Integration Works
 
 Meld connects to your Spotify account through a built-in WebView login — no developer setup or Client ID required. Here's what happens under the hood:
