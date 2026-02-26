@@ -496,6 +496,8 @@
     <string name="error_copied">Error info copied to clipboard</string>
     <string name="copy_error">Copy error</string>
     <string name="error_copy_hint">Copy error info to help developers debug the issue</string>
+    <string name="error_restricted_not_logged_in">Some tracks may not play due to age or country restrictions. Try logging into YouTube in Settings to resolve this issue.</string>
+    <string name="error_restricted_logged_in">This track is restricted (age or country) and cannot be played at this time.</string>
 
     <!-- Widget strings -->
     <string name="album_art">Album art</string>

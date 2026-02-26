@@ -140,6 +140,15 @@ Yes. Meld streams audio through YouTube Music's infrastructure like any other mu
 
 No. Meld uses Spotify for data only (your library, top tracks, search results) — not for audio streaming. Audio is streamed through YouTube Music. A free Spotify account works perfectly.
 
+### Q: Some songs won't play — I get a playback error
+
+Certain tracks on YouTube may be age-restricted or region-locked. If you're not logged into YouTube, some of these tracks cannot be played because YouTube requires authentication to verify your identity. To fix this:
+
+1. Go to **Settings → Account** and log in with your YouTube / Google account
+2. Go back and try playing the song again
+
+If the track still doesn't play after logging in, it may be restricted in your country or permanently unavailable.
+
 ### Q: Why do some songs not match correctly?
 
 The Spotify-to-YouTube matching uses fuzzy matching on title, artist name, and duration. In rare cases (live versions, remasters, regional variants), the match may not be perfect. Matched results are cached locally so they're resolved instantly on subsequent plays.

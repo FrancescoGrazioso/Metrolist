@@ -74,6 +74,7 @@ import com.metrolist.music.LocalPlayerConnection
 import com.metrolist.music.R
 import com.metrolist.music.constants.CropAlbumArtKey
 import com.metrolist.music.constants.HidePlayerThumbnailKey
+import com.metrolist.music.constants.InnerTubeCookieKey
 import com.metrolist.music.constants.PlayerBackgroundStyle
 import com.metrolist.music.constants.PlayerBackgroundStyleKey
 import com.metrolist.music.constants.PlayerHorizontalPadding
@@ -84,6 +85,7 @@ import com.metrolist.music.listentogether.RoomRole
 import com.metrolist.music.ui.component.CastButton
 import com.metrolist.music.utils.rememberEnumPreference
 import com.metrolist.music.utils.rememberPreference
+import com.metrolist.innertube.utils.parseCookieString
 import kotlinx.coroutines.delay
 
 /**
@@ -213,6 +215,12 @@ fun Thumbnail(
     val canSkipPrevious by playerConnection.canSkipPrevious.collectAsState()
     val canSkipNext by playerConnection.canSkipNext.collectAsState()
 
+    // YouTube login status
+    val innerTubeCookie by rememberPreference(InnerTubeCookieKey, "")
+    val isYouTubeLoggedIn = remember(innerTubeCookie) {
+        "SAPISID" in parseCookieString(innerTubeCookie)
+    }
+
     // Preferences - computed once
     // Disable swipe for Listen Together guests
     val swipeThumbnailPref by rememberPreference(SwipeThumbnailKey, true)
@@ -313,6 +321,7 @@ fun Thumbnail(
             error?.let { playbackError ->
                 PlaybackError(
                     error = playbackError,
+                    isLoggedIn = isYouTubeLoggedIn,
                     retry = playerConnection.player::prepare,
                 )
             }

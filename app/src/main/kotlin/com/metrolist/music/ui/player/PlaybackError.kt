@@ -35,28 +35,28 @@ import com.metrolist.music.R
 @Composable
 fun PlaybackError(
     error: PlaybackException,
+    isLoggedIn: Boolean,
     retry: () -> Unit,
 ) {
-    // Build detailed error info for debugging
     val rawErrorMessage = error.cause?.cause?.message 
         ?: error.cause?.message 
         ?: error.message 
         ?: stringResource(R.string.error_unknown)
     
-    // Check if this is an age-restricted content error
-    // Age-restricted content typically returns 403 Forbidden or contains age-related messages
-    val isAgeRestricted = rawErrorMessage.contains("age", ignoreCase = true) ||
+    val isRestricted = rawErrorMessage.contains("age", ignoreCase = true) ||
             rawErrorMessage.contains("Sign in to confirm your age", ignoreCase = true) ||
             rawErrorMessage.contains("LOGIN_REQUIRED", ignoreCase = true) ||
             rawErrorMessage.contains("confirm your age", ignoreCase = true) ||
-            rawErrorMessage.contains("403", ignoreCase = true) ||
-            rawErrorMessage.contains("Response code: 403", ignoreCase = true) ||
-            error.errorCode == PlaybackException.ERROR_CODE_IO_BAD_HTTP_STATUS
+            rawErrorMessage.contains("AGE_CHECK_REQUIRED", ignoreCase = true) ||
+            rawErrorMessage.contains("AGE_VERIFICATION_REQUIRED", ignoreCase = true) ||
+            rawErrorMessage.contains("CONTENT_CHECK_REQUIRED", ignoreCase = true) ||
+            rawErrorMessage.contains("country", ignoreCase = true) ||
+            error.errorCode == PlaybackException.ERROR_CODE_REMOTE_ERROR
     
-    val errorMessage = if (isAgeRestricted) {
-        "This app does not support playing age-restricted songs. We are working on fixing this issue."
-    } else {
-        rawErrorMessage
+    val errorMessage = when {
+        isRestricted && !isLoggedIn -> stringResource(R.string.error_restricted_not_logged_in)
+        isRestricted && isLoggedIn -> stringResource(R.string.error_restricted_logged_in)
+        else -> rawErrorMessage
     }
     
     Column(

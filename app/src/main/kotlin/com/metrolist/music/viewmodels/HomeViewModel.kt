@@ -34,8 +34,7 @@ import com.metrolist.music.constants.QuickPicks
 import com.metrolist.music.constants.QuickPicksKey
 import com.metrolist.music.constants.ShowWrappedCardKey
 import com.metrolist.music.constants.SpotifyAccessTokenKey
-import com.metrolist.music.constants.SpotifySpDcKey
-import com.metrolist.music.constants.SpotifySpKeyKey
+import com.metrolist.music.utils.SpotifyTokenManager
 import com.metrolist.music.constants.SpotifyTokenExpiryKey
 import com.metrolist.music.constants.UseSpotifyHomeKey
 import com.metrolist.music.constants.WrappedSeenKey
@@ -57,7 +56,6 @@ import com.metrolist.music.utils.get
 import com.metrolist.music.playback.SpotifyProfileCache
 import com.metrolist.music.utils.reportException
 import com.metrolist.spotify.Spotify
-import com.metrolist.spotify.SpotifyAuth
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Dispatchers
@@ -69,8 +67,6 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.sync.Mutex
-import kotlinx.coroutines.sync.withLock
 import timber.log.Timber
 import java.time.LocalDate
 import javax.inject.Inject
@@ -259,7 +255,6 @@ class HomeViewModel @Inject constructor(
         enabled && useForHome && homeOnly && hasToken
     }.distinctUntilChanged().stateIn(viewModelScope, SharingStarted.Lazily, false)
 
-    private val spotifyRefreshMutex = Mutex()
 
 	val showWrappedCard: StateFlow<Boolean> = context.dataStore.data.map { prefs ->
         val showWrappedPref = prefs[ShowWrappedCardKey] ?: false
@@ -567,7 +562,7 @@ class HomeViewModel @Inject constructor(
         }
 
         // Load remote content: Spotify or YouTube depending on preference
-        if (isSpotifyHome && ensureSpotifyAuth()) {
+        if (isSpotifyHome && SpotifyTokenManager.ensureAuthenticated()) {
             loadSpotifyHomeSections(hideExplicit)
         } else if (!isSpotifyOnly) {
             spotifyHomeSections.value = null
@@ -704,48 +699,6 @@ class HomeViewModel @Inject constructor(
         explorePage.value = null
     }
 
-    private suspend fun ensureSpotifyAuth(): Boolean {
-        val settings = context.dataStore.data.first()
-        val accessToken = settings[SpotifyAccessTokenKey] ?: ""
-        val expiry = settings[SpotifyTokenExpiryKey] ?: 0L
-
-        if (accessToken.isEmpty()) return false
-
-        if (System.currentTimeMillis() < expiry) {
-            Spotify.accessToken = accessToken
-            return true
-        }
-
-        return spotifyRefreshMutex.withLock {
-            val freshSettings = context.dataStore.data.first()
-            val freshToken = freshSettings[SpotifyAccessTokenKey] ?: ""
-            val freshExpiry = freshSettings[SpotifyTokenExpiryKey] ?: 0L
-
-            if (freshToken.isNotEmpty() && System.currentTimeMillis() < freshExpiry) {
-                Spotify.accessToken = freshToken
-                return@withLock true
-            }
-
-            val spDc = freshSettings[SpotifySpDcKey] ?: ""
-            val spKey = freshSettings[SpotifySpKeyKey] ?: ""
-            if (spDc.isEmpty()) return@withLock false
-
-            SpotifyAuth.fetchAccessToken(spDc, spKey).fold(
-                onSuccess = { token ->
-                    Spotify.accessToken = token.accessToken
-                    context.dataStore.edit { prefs ->
-                        prefs[SpotifyAccessTokenKey] = token.accessToken
-                        prefs[SpotifyTokenExpiryKey] = token.accessTokenExpirationTimestampMs
-                    }
-                    true
-                },
-                onFailure = { e ->
-                    Timber.e(e, "HomeVM: Spotify token refresh failed")
-                    false
-                },
-            )
-        }
-    }
 
     private val _isLoadingMore = MutableStateFlow(false)
     fun loadMoreYouTubeItems(continuation: String?) {

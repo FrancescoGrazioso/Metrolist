@@ -25,9 +25,7 @@ import com.metrolist.music.constants.HideExplicitKey
 import com.metrolist.music.constants.HideVideoSongsKey
 import com.metrolist.music.constants.HideYoutubeShortsKey
 import com.metrolist.music.constants.SpotifyAccessTokenKey
-import com.metrolist.music.constants.SpotifySpDcKey
-import com.metrolist.music.constants.SpotifySpKeyKey
-import com.metrolist.music.constants.SpotifyTokenExpiryKey
+import com.metrolist.music.utils.SpotifyTokenManager
 import com.metrolist.music.constants.UseSpotifySearchKey
 import com.metrolist.music.models.ItemsPage
 import com.metrolist.music.utils.dataStore
@@ -40,7 +38,6 @@ import com.metrolist.music.utils.toSongItem
 import com.metrolist.music.db.MusicDatabase
 import com.metrolist.music.playback.SpotifyYouTubeMapper
 import com.metrolist.spotify.Spotify
-import com.metrolist.spotify.SpotifyAuth
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Dispatchers
@@ -50,9 +47,6 @@ import kotlinx.coroutines.launch
 import timber.log.Timber
 import java.net.URLDecoder
 import javax.inject.Inject
-import androidx.datastore.preferences.core.edit
-import kotlinx.coroutines.sync.Mutex
-import kotlinx.coroutines.sync.withLock
 
 @HiltViewModel
 class OnlineSearchViewModel
@@ -85,7 +79,6 @@ constructor(
      */
     val spotifyFilter = MutableStateFlow<String?>(null)
 
-    private val refreshMutex = Mutex()
 
     init {
         viewModelScope.launch(Dispatchers.IO) {
@@ -157,7 +150,7 @@ constructor(
 
     private fun initSpotifySearch() {
         viewModelScope.launch(Dispatchers.IO) {
-            if (!ensureSpotifyAuth()) {
+            if (!SpotifyTokenManager.ensureAuthenticated()) {
                 Timber.w("SearchVM: Spotify auth failed, falling back to YouTube")
                 isSpotifySearch.value = false
                 initYouTubeSearch()
@@ -316,7 +309,7 @@ constructor(
             val limit = 20
             val hideExplicit = context.dataStore.get(HideExplicitKey, false)
 
-            if (!ensureSpotifyAuth()) return@launch
+            if (!SpotifyTokenManager.ensureAuthenticated()) return@launch
 
             Spotify.search(
                 query = query,
@@ -353,46 +346,4 @@ constructor(
         }
     }
 
-    private suspend fun ensureSpotifyAuth(): Boolean {
-        val settings = context.dataStore.data.first()
-        val accessToken = settings[SpotifyAccessTokenKey] ?: ""
-        val expiry = settings[SpotifyTokenExpiryKey] ?: 0L
-
-        if (accessToken.isEmpty()) return false
-
-        if (System.currentTimeMillis() < expiry) {
-            Spotify.accessToken = accessToken
-            return true
-        }
-
-        return refreshMutex.withLock {
-            val freshSettings = context.dataStore.data.first()
-            val freshToken = freshSettings[SpotifyAccessTokenKey] ?: ""
-            val freshExpiry = freshSettings[SpotifyTokenExpiryKey] ?: 0L
-
-            if (freshToken.isNotEmpty() && System.currentTimeMillis() < freshExpiry) {
-                Spotify.accessToken = freshToken
-                return@withLock true
-            }
-
-            val spDc = freshSettings[SpotifySpDcKey] ?: ""
-            val spKey = freshSettings[SpotifySpKeyKey] ?: ""
-            if (spDc.isEmpty()) return@withLock false
-
-            SpotifyAuth.fetchAccessToken(spDc, spKey).fold(
-                onSuccess = { token ->
-                    Spotify.accessToken = token.accessToken
-                    context.dataStore.edit { prefs ->
-                        prefs[SpotifyAccessTokenKey] = token.accessToken
-                        prefs[SpotifyTokenExpiryKey] = token.accessTokenExpirationTimestampMs
-                    }
-                    true
-                },
-                onFailure = { e ->
-                    Timber.e(e, "SearchVM: Spotify token refresh failed")
-                    false
-                },
-            )
-        }
-    }
 }

@@ -33,6 +33,7 @@ import com.metrolist.music.di.ApplicationScope
 import com.metrolist.music.extensions.toEnum
 import com.metrolist.music.extensions.toInetSocketAddress
 import com.metrolist.music.utils.CrashHandler
+import com.metrolist.music.utils.SpotifyTokenManager
 import com.metrolist.music.utils.cipher.CipherDeobfuscator
 import com.metrolist.music.utils.dataStore
 import com.metrolist.music.utils.reportException
@@ -112,26 +113,10 @@ class App : Application(), SingletonImageLoader.Factory {
             }
         }
 
-        // Restore Spotify access token from preferences, refresh via cookie if expired
-        val spDc = settings[SpotifySpDcKey] ?: ""
-        val spKey = settings[SpotifySpKeyKey] ?: ""
-        settings[SpotifyAccessTokenKey]?.takeIf { it.isNotEmpty() }?.let { token ->
-            val expiry = settings[SpotifyTokenExpiryKey] ?: 0L
-            if (System.currentTimeMillis() < expiry) {
-                Spotify.accessToken = token
-            } else if (spDc.isNotEmpty()) {
-                applicationScope.launch(Dispatchers.IO) {
-                    SpotifyAuth.fetchAccessToken(spDc, spKey).onSuccess { newToken ->
-                        Spotify.accessToken = newToken.accessToken
-                        dataStore.edit { prefs ->
-                            prefs[SpotifyAccessTokenKey] = newToken.accessToken
-                            prefs[SpotifyTokenExpiryKey] = newToken.accessTokenExpirationTimestampMs
-                        }
-                    }.onFailure { e ->
-                        Timber.e(e, "Failed to refresh Spotify token on startup")
-                    }
-                }
-            }
+        // Initialize centralized token manager and restore/refresh Spotify token
+        SpotifyTokenManager.init(dataStore)
+        applicationScope.launch(Dispatchers.IO) {
+            SpotifyTokenManager.ensureAuthenticated()
         }
 
         if (settings[ProxyEnabledKey] == true) {

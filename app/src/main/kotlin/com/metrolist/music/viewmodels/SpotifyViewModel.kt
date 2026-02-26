@@ -15,17 +15,13 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.metrolist.music.constants.EnableSpotifyKey
 import com.metrolist.music.constants.SpotifyAccessTokenKey
-import com.metrolist.music.constants.SpotifySpDcKey
-import com.metrolist.music.constants.SpotifySpKeyKey
-import com.metrolist.music.constants.SpotifyTokenExpiryKey
 import com.metrolist.music.db.MusicDatabase
 import com.metrolist.music.playback.SpotifyYouTubeMapper
 import com.metrolist.music.utils.dataStore
 import com.metrolist.spotify.Spotify
-import com.metrolist.spotify.SpotifyAuth
+import com.metrolist.music.utils.SpotifyTokenManager
 import com.metrolist.spotify.models.SpotifyPlaylist
 import com.metrolist.spotify.models.SpotifyTrack
-import androidx.datastore.preferences.core.edit
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Dispatchers
@@ -34,12 +30,9 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.distinctUntilChanged
-import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.sync.Mutex
-import kotlinx.coroutines.sync.withLock
 import timber.log.Timber
 import javax.inject.Inject
 
@@ -181,7 +174,7 @@ constructor(
         _playlistsLoading.value = true
         _playlistsError.value = null
 
-        if (!ensureAuthenticated()) {
+        if (!SpotifyTokenManager.ensureAuthenticated()) {
             Timber.w("SpotifyVM: loadPlaylists() - auth failed")
             _playlistsError.value = "Not authenticated"
             _playlistsLoading.value = false
@@ -213,7 +206,7 @@ constructor(
         Timber.d("SpotifyVM: loadLikedSongs() start")
         _likedSongsLoading.value = true
 
-        if (!ensureAuthenticated()) {
+        if (!SpotifyTokenManager.ensureAuthenticated()) {
             Timber.w("SpotifyVM: loadLikedSongs() - auth failed")
             _likedSongsLoading.value = false
             setFallback("Authentication failed while loading liked songs")
@@ -238,7 +231,7 @@ constructor(
 
     private suspend fun loadTopTracksInternal() {
         Timber.d("SpotifyVM: loadTopTracks() start")
-        if (!ensureAuthenticated()) {
+        if (!SpotifyTokenManager.ensureAuthenticated()) {
             Timber.w("SpotifyVM: loadTopTracks() - auth failed")
             return
         }
@@ -255,7 +248,7 @@ constructor(
 
     suspend fun getPlaylistTracks(playlistId: String): List<SpotifyTrack> {
         Timber.d("SpotifyVM: getPlaylistTracks($playlistId)")
-        if (!ensureAuthenticated()) return emptyList()
+        if (!SpotifyTokenManager.ensureAuthenticated()) return emptyList()
 
         return Spotify.playlistTracks(playlistId, limit = 100).getOrNull()
             ?.items
@@ -268,95 +261,13 @@ constructor(
     // Authentication
     // =========================================================================
 
-    // Mutex prevents multiple coroutines from refreshing the token concurrently.
-    // Without this, parallel calls see an expired token and all try to refresh
-    // using the same refresh token; the first succeeds but the rest get
-    // "invalid_grant" because Spotify revokes the old refresh token.
-    private val refreshMutex = Mutex()
-
-    private val _needsReLogin = MutableStateFlow(false)
-    val needsReLogin = _needsReLogin.asStateFlow()
-
-    private suspend fun ensureAuthenticated(): Boolean {
-        val settings = context.dataStore.data.first()
-        val accessToken = settings[SpotifyAccessTokenKey] ?: ""
-        val spDc = settings[SpotifySpDcKey] ?: ""
-        val expiry = settings[SpotifyTokenExpiryKey] ?: 0L
-
-        Timber.d("SpotifyVM: ensureAuthenticated() - token present=${accessToken.isNotEmpty()}, " +
-            "expires in ${(expiry - System.currentTimeMillis()) / 1000}s, " +
-            "spDc present=${spDc.isNotEmpty()}")
-
-        if (accessToken.isEmpty()) {
-            Timber.w("SpotifyVM: ensureAuthenticated() - NO TOKEN")
-            return false
-        }
-
-        if (System.currentTimeMillis() < expiry) {
-            Spotify.accessToken = accessToken
-            Timber.d("SpotifyVM: ensureAuthenticated() - token valid, set on Spotify client")
-            return true
-        }
-
-        return refreshMutex.withLock {
-            val freshSettings = context.dataStore.data.first()
-            val freshAccessToken = freshSettings[SpotifyAccessTokenKey] ?: ""
-            val freshExpiry = freshSettings[SpotifyTokenExpiryKey] ?: 0L
-
-            if (freshAccessToken.isNotEmpty() && System.currentTimeMillis() < freshExpiry) {
-                Spotify.accessToken = freshAccessToken
-                Timber.d("SpotifyVM: ensureAuthenticated() - token already refreshed by another coroutine")
-                return@withLock true
-            }
-
-            val currentSpDc = freshSettings[SpotifySpDcKey] ?: ""
-            val currentSpKey = freshSettings[SpotifySpKeyKey] ?: ""
-            if (currentSpDc.isEmpty()) {
-                Timber.w("SpotifyVM: ensureAuthenticated() - no sp_dc cookie available")
-                return@withLock false
-            }
-
-            Timber.d("SpotifyVM: ensureAuthenticated() - token EXPIRED, refreshing via cookie...")
-
-            SpotifyAuth.fetchAccessToken(currentSpDc, currentSpKey).fold(
-                onSuccess = { token ->
-                    Spotify.accessToken = token.accessToken
-                    context.dataStore.edit { prefs ->
-                        prefs[SpotifyAccessTokenKey] = token.accessToken
-                        prefs[SpotifyTokenExpiryKey] = token.accessTokenExpirationTimestampMs
-                    }
-                    _needsReLogin.value = false
-                    Timber.d("SpotifyVM: ensureAuthenticated() - token refreshed successfully")
-                    true
-                },
-                onFailure = { e ->
-                    Timber.e(e, "SpotifyVM: ensureAuthenticated() - REFRESH FAILED")
-
-                    val isCookieExpired = e.message?.contains("anonymous") == true ||
-                        e.message?.contains("expired") == true
-                    if (isCookieExpired) {
-                        Timber.w("SpotifyVM: Cookie expired, clearing tokens - re-login required")
-                        context.dataStore.edit { prefs ->
-                            prefs.remove(SpotifyAccessTokenKey)
-                            prefs.remove(SpotifySpDcKey)
-                            prefs.remove(SpotifySpKeyKey)
-                            prefs.remove(SpotifyTokenExpiryKey)
-                        }
-                        Spotify.accessToken = null
-                        _needsReLogin.value = true
-                    }
-
-                    false
-                },
-            )
-        }
-    }
+    val needsReLogin = SpotifyTokenManager.needsReLogin
 
     private fun handleAuthError(error: Throwable) {
         if (error is Spotify.SpotifyException && error.statusCode == 401) {
             Timber.w("SpotifyVM: Got 401, will attempt token refresh")
             viewModelScope.launch(Dispatchers.IO) {
-                val refreshed = ensureAuthenticated()
+                val refreshed = SpotifyTokenManager.ensureAuthenticated()
                 Timber.d("SpotifyVM: handleAuthError - refresh result: $refreshed")
             }
         }
