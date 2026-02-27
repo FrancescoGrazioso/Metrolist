@@ -186,6 +186,7 @@ import kotlinx.coroutines.withContext
 sealed class HomeSection(val id: String, val baseWeight: Int) {
     data object SpeedDial : HomeSection("speed_dial", 100)
     data object QuickPicks : HomeSection("quick_picks", 90)
+    data object RecentlyPlayed : HomeSection("recently_played", 85)
     data object DailyDiscover : HomeSection("daily_discover", 80)
     data object KeepListening : HomeSection("keep_listening", 50)
     data object AccountPlaylists : HomeSection("account_playlists", 40)
@@ -578,6 +579,7 @@ fun HomeScreen(
     val mediaMetadata by playerConnection.mediaMetadata.collectAsState()
 
     val quickPicks by viewModel.quickPicks.collectAsState()
+    val recentlyPlayed by viewModel.recentlyPlayed.collectAsState()
     val forgottenFavorites by viewModel.forgottenFavorites.collectAsState()
     val keepListening by viewModel.keepListening.collectAsState()
     val similarRecommendations by viewModel.similarRecommendations.collectAsState()
@@ -830,6 +832,7 @@ fun HomeScreen(
         isSpotifyHomeOnly,
         speedDialItems,
         quickPicks,
+        recentlyPlayed,
         dailyDiscover,
         keepListening,
         accountPlaylists,
@@ -840,6 +843,8 @@ fun HomeScreen(
         explorePage?.moodAndGenres
     ) {
         val list = mutableListOf<HomeSection>()
+
+        if (recentlyPlayed?.isNotEmpty() == true) list.add(HomeSection.RecentlyPlayed)
 
         if (!isSpotifyHomeOnly) {
             if (speedDialItems.isNotEmpty()) list.add(HomeSection.SpeedDial)
@@ -872,7 +877,8 @@ fun HomeScreen(
                 // All "main" sections start closer together
                 val base = when (section) {
                     HomeSection.SpeedDial, 
-                    HomeSection.QuickPicks, 
+                    HomeSection.QuickPicks,
+                    HomeSection.RecentlyPlayed,
                     HomeSection.DailyDiscover -> 500 // Top tier starts equal
                     
                     HomeSection.KeepListening,
@@ -888,6 +894,7 @@ fun HomeScreen(
                     // Range: [500-200, 500+400] = [300, 900]
                     HomeSection.SpeedDial, 
                     HomeSection.QuickPicks,
+                    HomeSection.RecentlyPlayed,
                     HomeSection.DailyDiscover -> sectionRandom.nextInt(-200, 400) 
 
                     // Middle tier: Can jump up to challenge top tier, or drop lower
@@ -907,6 +914,7 @@ fun HomeScreen(
              val defaultOrder = mapOf(
                  HomeSection.SpeedDial to 100,
                  HomeSection.QuickPicks to 90,
+                 HomeSection.RecentlyPlayed to 85,
                  HomeSection.FromTheCommunity to 80,
                  HomeSection.DailyDiscover to 70,
                  HomeSection.KeepListening to 60,
@@ -1309,6 +1317,100 @@ fun HomeScreen(
                                                                     playerConnection.playQueue(
                                                                         YouTubeQueue.radio(
                                                                             song!!.toMediaMetadata()
+                                                                        )
+                                                                    )
+                                                                }
+                                                            },
+                                                            onLongClick = {
+                                                                haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                                                menuState.show {
+                                                                    SongMenu(
+                                                                        originalSong = song!!,
+                                                                        navController = navController,
+                                                                        onDismiss = menuState::dismiss
+                                                                    )
+                                                                }
+                                                            }
+                                                        )
+                                                )
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                            HomeSection.RecentlyPlayed -> {
+                                recentlyPlayed?.takeIf { it.isNotEmpty() }?.let { songs ->
+                                    val recentTitle = viewModel.context.getString(R.string.recently_played)
+                                    item(key = "recently_played_title") {
+                                        NavigationTitle(
+                                            title = recentTitle,
+                                            modifier = Modifier.animateItem(),
+                                            onPlayAllClick = {
+                                                playerConnection.playQueue(
+                                                    ListQueue(
+                                                        title = recentTitle,
+                                                        items = songs.distinctBy { it.id }.map { it.toMediaItem() }
+                                                    )
+                                                )
+                                            }
+                                        )
+                                    }
+
+                                    item(key = "recently_played_list") {
+                                        val rows = if (songs.size > 6) 2 else 1
+                                        LazyHorizontalGrid(
+                                            state = rememberLazyGridState(),
+                                            rows = GridCells.Fixed(rows),
+                                            contentPadding = WindowInsets.systemBars.only(WindowInsetsSides.Horizontal)
+                                                .asPaddingValues(),
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .height(ListItemHeight * rows)
+                                                .animateItem()
+                                        ) {
+                                            items(
+                                                items = songs.distinctBy { it.id },
+                                                key = { "rp_${it.id}" }
+                                            ) { originalSong ->
+                                                val song by database.song(originalSong.id)
+                                                    .collectAsState(initial = originalSong)
+
+                                                SongListItem(
+                                                    song = song!!,
+                                                    showInLibraryIcon = true,
+                                                    isActive = song!!.id == mediaMetadata?.id,
+                                                    isPlaying = isPlaying,
+                                                    isSwipeable = false,
+                                                    trailingContent = {
+                                                        IconButton(
+                                                            onClick = {
+                                                                menuState.show {
+                                                                    SongMenu(
+                                                                        originalSong = song!!,
+                                                                        navController = navController,
+                                                                        onDismiss = menuState::dismiss
+                                                                    )
+                                                                }
+                                                            }
+                                                        ) {
+                                                            Icon(
+                                                                painter = painterResource(R.drawable.more_vert),
+                                                                contentDescription = null
+                                                            )
+                                                        }
+                                                    },
+                                                    modifier = Modifier
+                                                        .width(horizontalLazyGridItemWidth)
+                                                        .combinedClickable(
+                                                            onClick = {
+                                                                if (song!!.id == mediaMetadata?.id) {
+                                                                    playerConnection.togglePlayPause()
+                                                                } else {
+                                                                    playerConnection.playQueue(
+                                                                        ListQueue(
+                                                                            title = recentTitle,
+                                                                            items = songs.map { it.toMediaItem() },
+                                                                            startIndex = songs.indexOfFirst { it.id == song!!.id }.coerceAtLeast(0)
                                                                         )
                                                                     )
                                                                 }

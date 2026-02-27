@@ -161,7 +161,6 @@ object LastFM {
         }
     }
 
-
     suspend fun setLoveStatus(
         artist: String, track: String, love: Boolean
     ) = runCatching {

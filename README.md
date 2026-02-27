@@ -161,6 +161,17 @@ If the track still doesn't play after logging in, it may be restricted in your c
 
 The Spotify-to-YouTube matching uses fuzzy matching on title, artist name, and duration. In rare cases (live versions, remasters, regional variants), the match may not be perfect. Matched results are cached locally so they're resolved instantly on subsequent plays.
 
+### Q: Can my Spotify or YouTube account get banned?
+
+**Spotify:** Meld uses Spotify's APIs in read-only mode to access your library, playlists, and recommendations. It does **not** stream audio from Spotify, generate artificial plays, or modify your account data. While using unofficial API clients technically falls outside Spotify's Terms of Service, the risk of account action is considered low — similar apps have operated for years without widespread bans. That said, **use Meld at your own risk** and consider using a secondary Spotify account if you're concerned.
+
+**YouTube/Google:** Audio is streamed through YouTube Music's infrastructure using the InnerTube API. Google has historically been more aggressive with unofficial clients. To minimize risk:
+- Avoid logging into your Google account in Meld unless needed for age-restricted content
+- Using Meld without a Google login carries minimal risk to your Google account
+- If you do log in, be aware this carries a small but nonzero risk
+
+**Bottom line:** No bans have been reported by Meld users to date. However, as with any third-party client, we cannot guarantee that platform policies won't change in the future.
+
 ## Credits
 
 Meld is a fork of [Metrolist](https://github.com/MetrolistGroup/Metrolist), originally created by [Mo Agamy](https://github.com/mostafaalagamy).

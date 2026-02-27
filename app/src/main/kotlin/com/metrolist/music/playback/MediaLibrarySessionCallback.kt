@@ -34,6 +34,15 @@ import com.metrolist.innertube.models.SongItem
 import com.metrolist.innertube.models.filterExplicit
 import com.metrolist.innertube.models.filterVideoSongs
 import com.metrolist.music.R
+import com.metrolist.spotify.Spotify
+import com.metrolist.spotify.SpotifyMapper
+import com.metrolist.spotify.models.SpotifyPlaylist
+import com.metrolist.spotify.models.SpotifyTrack
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.withTimeoutOrNull
+import timber.log.Timber
 import com.metrolist.music.constants.HideExplicitKey
 import com.metrolist.music.constants.HideVideoSongsKey
 import com.metrolist.music.constants.MediaSessionConstants
@@ -70,6 +79,14 @@ constructor(
     var toggleLike: () -> Unit = {}
     var toggleStartRadio: () -> Unit = {}
     var toggleLibrary: () -> Unit = {}
+
+    private val spotifyMapper by lazy { SpotifyYouTubeMapper(database) }
+
+    companion object {
+        private const val TAG = "MediaLibraryCallback"
+        private const val SPOTIFY_RESOLVE_TIMEOUT_MS = 30_000L
+        private const val SPOTIFY_MAX_PLAYLIST_TRACKS = 100
+    }
 
     override fun onConnect(
         session: MediaSession,
@@ -270,7 +287,8 @@ constructor(
                                 ytPlaylist.thumbnail?.toUri(),
                                 MediaMetadata.MEDIA_TYPE_PLAYLIST,
                             )
-                        }
+                        } +
+                        fetchSpotifyPlaylistItems()
                     }
 
                     else ->
@@ -332,6 +350,11 @@ constructor(
                                                 .build()
                                         ).build()
                                 ) + songs.map { it.toMediaItem(parentId) }
+                            }
+
+                            parentId.startsWith("${MusicService.SPOTIFY_PLAYLIST}/") -> {
+                                val playlistId = parentId.removePrefix("${MusicService.SPOTIFY_PLAYLIST}/")
+                                fetchSpotifyPlaylistTracks(parentId, playlistId)
                             }
 
                             parentId.startsWith("${MusicService.YOUTUBE_PLAYLIST}/") -> {
@@ -622,6 +645,13 @@ constructor(
                     }
                 }
 
+                MusicService.SPOTIFY_PLAYLIST -> {
+                    val trackId = path.getOrNull(2) ?: return@future defaultResult
+                    val playlistId = path.getOrNull(1) ?: return@future defaultResult
+                    resolveSpotifyPlaylistForPlayback(playlistId, trackId, startPositionMs)
+                        ?: defaultResult
+                }
+
                 MusicService.SEARCH -> {
                     val songId = path.getOrNull(2) ?: return@future defaultResult
                     val searchQuery = path.getOrNull(1) ?: return@future defaultResult
@@ -757,5 +787,112 @@ constructor(
                     .setMediaType(MediaMetadata.MEDIA_TYPE_MUSIC)
                     .build(),
             ).build()
+    }
+
+    // ── Spotify playlist helpers ─────────────────────────────────────────
+
+    private suspend fun fetchSpotifyPlaylistItems(): List<MediaItem> {
+        if (!Spotify.isAuthenticated()) return emptyList()
+        return try {
+            val playlists = Spotify.myPlaylists(limit = 50).getOrNull()?.items ?: emptyList()
+            playlists.map { playlist ->
+                browsableMediaItem(
+                    "${MusicService.SPOTIFY_PLAYLIST}/${playlist.id}",
+                    playlist.name,
+                    playlist.owner?.displayName ?: "Spotify",
+                    SpotifyMapper.getPlaylistThumbnail(playlist)?.toUri(),
+                    MediaMetadata.MEDIA_TYPE_PLAYLIST,
+                )
+            }
+        } catch (e: Exception) {
+            Timber.tag(TAG).w(e, "Failed to fetch Spotify playlists for Auto")
+            emptyList()
+        }
+    }
+
+    private suspend fun fetchSpotifyPlaylistTracks(
+        parentId: String,
+        playlistId: String,
+    ): List<MediaItem> {
+        return try {
+            val result = Spotify.playlistTracks(playlistId, limit = SPOTIFY_MAX_PLAYLIST_TRACKS)
+                .getOrNull() ?: return emptyList()
+            val tracks = result.items.mapNotNull { it.track?.takeIf { t -> !t.isLocal } }
+
+            val shuffleItem = MediaItem.Builder()
+                .setMediaId("$parentId/${MusicService.SHUFFLE_ACTION}")
+                .setMediaMetadata(
+                    MediaMetadata.Builder()
+                        .setTitle(context.getString(R.string.shuffle))
+                        .setArtworkUri(drawableUri(R.drawable.shuffle))
+                        .setIsPlayable(true)
+                        .setIsBrowsable(false)
+                        .setMediaType(MediaMetadata.MEDIA_TYPE_MUSIC)
+                        .build()
+                ).build()
+
+            listOf(shuffleItem) + tracks.map { track ->
+                val thumbnail = SpotifyMapper.getTrackThumbnail(track)
+                MediaItem.Builder()
+                    .setMediaId("$parentId/${track.id}")
+                    .setMediaMetadata(
+                        MediaMetadata.Builder()
+                            .setTitle(track.name)
+                            .setSubtitle(track.artists.joinToString(", ") { it.name })
+                            .setArtist(track.artists.joinToString(", ") { it.name })
+                            .setArtworkUri(thumbnail?.toUri())
+                            .setIsPlayable(true)
+                            .setIsBrowsable(false)
+                            .setMediaType(MediaMetadata.MEDIA_TYPE_MUSIC)
+                            .build()
+                    ).build()
+            }
+        } catch (e: Exception) {
+            Timber.tag(TAG).w(e, "Failed to fetch Spotify playlist tracks for Auto")
+            emptyList()
+        }
+    }
+
+    private suspend fun resolveSpotifyPlaylistForPlayback(
+        playlistId: String,
+        trackId: String,
+        startPositionMs: Long,
+    ): MediaItemsWithStartPosition? {
+        val result = try {
+            Spotify.playlistTracks(playlistId, limit = SPOTIFY_MAX_PLAYLIST_TRACKS)
+                .getOrNull()
+        } catch (e: Exception) {
+            Timber.tag(TAG).e(e, "Failed to fetch Spotify playlist for playback")
+            return null
+        } ?: return null
+
+        val tracks = result.items.mapNotNull { it.track?.takeIf { t -> !t.isLocal } }
+        if (tracks.isEmpty()) return null
+
+        val isShuffle = trackId == MusicService.SHUFFLE_ACTION
+        val orderedTracks = if (isShuffle) tracks.shuffled() else tracks
+
+        val resolved = withTimeoutOrNull(SPOTIFY_RESOLVE_TIMEOUT_MS) {
+            coroutineScope {
+                orderedTracks.map { track ->
+                    async(Dispatchers.IO) { spotifyMapper.resolveToMediaItem(track)?.let { track.id to it } }
+                }.awaitAll().filterNotNull()
+            }
+        }
+
+        if (resolved.isNullOrEmpty()) {
+            Timber.tag(TAG).w("No Spotify tracks resolved for playlist $playlistId")
+            return null
+        }
+
+        val mediaItems = resolved.map { it.second }
+        val targetIndex = if (isShuffle) {
+            0
+        } else {
+            resolved.indexOfFirst { it.first == trackId }.takeIf { it >= 0 } ?: 0
+        }
+
+        Timber.tag(TAG).d("Spotify Auto playback: resolved ${mediaItems.size}/${tracks.size} tracks")
+        return MediaItemsWithStartPosition(mediaItems, targetIndex, if (isShuffle) C.TIME_UNSET else startPositionMs)
     }
 }

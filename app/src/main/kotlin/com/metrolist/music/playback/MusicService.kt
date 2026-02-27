@@ -3259,6 +3259,7 @@ class MusicService :
         const val ALBUM = "album"
         const val PLAYLIST = "playlist"
         const val YOUTUBE_PLAYLIST = "youtube_playlist"
+        const val SPOTIFY_PLAYLIST = "spotify_playlist"
         const val SEARCH = "search"
         const val SHUFFLE_ACTION = "__shuffle__"
 
