@@ -98,13 +98,11 @@ class App : Application(), SingletonImageLoader.Factory {
             KuGou.useTraditionalChinese = true
         }
 
+        // Initialize LastFM with API keys from BuildConfig (GitHub Secrets)
         LastFM.initialize(
-            apiKey = BuildConfig.LASTFM_API_KEY,
-            secret = BuildConfig.LASTFM_SECRET,
+            apiKey = BuildConfig.LASTFM_API_KEY.takeIf { it.isNotEmpty() } ?: "",
+            secret = BuildConfig.LASTFM_SECRET.takeIf { it.isNotEmpty() } ?: ""
         )
-        if (!LastFM.isInitialized()) {
-            Timber.w("Last.fm API keys are empty — scrobbling will not work")
-        }
 
         // Wire up Spotify API logging to Timber
         Spotify.logger = { level, message ->

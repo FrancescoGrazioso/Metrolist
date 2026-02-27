@@ -116,22 +116,16 @@ object LastFM {
         override fun toString(): String = "LastFmException(code=$code, message=$message)"
     }
 
-    private fun requireSession(): String {
-        if (!isInitialized()) throw LastFmException(0, "Last.fm API keys not configured")
-        return sessionKey ?: throw LastFmException(0, "Last.fm session key not set — user not logged in")
-    }
-
     suspend fun updateNowPlaying(
         artist: String, track: String,
         album: String? = null, trackNumber: Int? = null, duration: Int? = null
     ) = runCatching {
-        val sk = requireSession()
         client.post {
             lastfmParams(
                 method = "track.updateNowPlaying",
                 apiKey = API_KEY,
                 secret = SECRET,
-                sessionKey = sk,
+                sessionKey = sessionKey!!,
                 extra = buildMap {
                     put("artist", artist)
                     put("track", track)
@@ -148,13 +142,12 @@ object LastFM {
         artist: String, track: String, timestamp: Long,
         album: String? = null, trackNumber: Int? = null, duration: Int? = null
     ) = runCatching {
-        val sk = requireSession()
         client.post {
             lastfmParams(
                 method = "track.scrobble",
                 apiKey = API_KEY,
                 secret = SECRET,
-                sessionKey = sk,
+                sessionKey = sessionKey!!,
                 extra = buildMap {
                     put("artist[0]", artist)
                     put("track[0]", track)
@@ -171,14 +164,13 @@ object LastFM {
     suspend fun setLoveStatus(
         artist: String, track: String, love: Boolean
     ) = runCatching {
-        val sk = requireSession()
         val method = if (love) "track.love" else "track.unlove"
         client.post {
             lastfmParams(
                 method = method,
                 apiKey = API_KEY,
                 secret = SECRET,
-                sessionKey = sk,
+                sessionKey = sessionKey!!,
                 extra = buildMap {
                     put("artist", artist)
                     put("track", track)
