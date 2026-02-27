@@ -52,11 +52,14 @@ object SpotifyProfileCache {
     private const val CACHE_TTL_DEGRADED_MS = 30L * 60 * 1000 // 30min when only GQL data — retry sooner
     private const val REST_COOLDOWN_MS = 60L * 1000 // 1 min cooldown after 429
     private const val REST_CALL_TIMEOUT_MS = 8000L // Max wait for a single REST call
+    private const val FOLLOWED_ARTISTS_TTL_MS = 12L * 60 * 60 * 1000 // 12h — followed artists change rarely
 
     private val CACHE_KEY_TRACKS = stringPreferencesKey("spotify_profile_tracks_json")
     private val CACHE_KEY_ARTISTS = stringPreferencesKey("spotify_profile_artists_json")
     private val CACHE_KEY_TIMESTAMP = longPreferencesKey("spotify_profile_cache_ts")
     private val CACHE_KEY_HAD_REST = booleanPreferencesKey("spotify_profile_had_rest")
+    private val CACHE_KEY_FOLLOWED_ARTISTS = stringPreferencesKey("spotify_followed_artists_json")
+    private val CACHE_KEY_FOLLOWED_TS = longPreferencesKey("spotify_followed_artists_ts")
 
     private val json = Json { ignoreUnknownKeys = true; encodeDefaults = true }
     private val refreshMutex = Mutex()
@@ -66,6 +69,19 @@ object SpotifyProfileCache {
     @Volatile private var lastRefreshMs: Long = 0L
     @Volatile private var lastRestFailMs: Long = 0L
     @Volatile private var lastRefreshHadRest: Boolean = false
+
+    private const val RELATED_ARTISTS_TTL_MS = 24L * 60 * 60 * 1000 // 24h — related artists are stable
+
+    private val CACHE_KEY_RELATED_NAMES = stringPreferencesKey("spotify_related_artist_names_json")
+    private val CACHE_KEY_RELATED_TS = longPreferencesKey("spotify_related_artist_names_ts")
+
+    @Volatile private var cachedFollowedArtists: List<SpotifyArtist> = emptyList()
+    @Volatile private var followedArtistsRefreshMs: Long = 0L
+    private val followedArtistsMutex = Mutex()
+
+    @Volatile private var cachedRelatedArtistNames: Set<String> = emptySet()
+    @Volatile private var relatedArtistsRefreshMs: Long = 0L
+    private val relatedArtistsMutex = Mutex()
 
     @Serializable
     private data class CachedTrackList(val tracks: List<SpotifyTrack>)
@@ -99,6 +115,189 @@ object SpotifyProfileCache {
     }
 
     /**
+     * Returns followed/library artists from Spotify via GQL libraryV3.
+     * Fallback chain: GQL -> DataStore cache -> top artists (from profile cache).
+     */
+    suspend fun getFollowedArtists(
+        context: Context,
+        database: MusicDatabase? = null,
+        limit: Int = 50,
+    ): List<SpotifyArtist> {
+        if (System.currentTimeMillis() - followedArtistsRefreshMs < FOLLOWED_ARTISTS_TTL_MS &&
+            cachedFollowedArtists.isNotEmpty()
+        ) return cachedFollowedArtists.take(limit)
+
+        followedArtistsMutex.withLock {
+            if (System.currentTimeMillis() - followedArtistsRefreshMs < FOLLOWED_ARTISTS_TTL_MS &&
+                cachedFollowedArtists.isNotEmpty()
+            ) return cachedFollowedArtists.take(limit)
+
+            if (cachedFollowedArtists.isEmpty()) {
+                restoreFollowedArtistsFromDataStore(context)
+                if (System.currentTimeMillis() - followedArtistsRefreshMs < FOLLOWED_ARTISTS_TTL_MS &&
+                    cachedFollowedArtists.isNotEmpty()
+                ) return cachedFollowedArtists.take(limit)
+            }
+
+            try {
+                val allArtists = mutableListOf<SpotifyArtist>()
+                var offset = 0
+                val pageSize = 50
+                do {
+                    val result = withContext(Dispatchers.IO) {
+                        Spotify.myArtists(limit = pageSize, offset = offset)
+                    }
+                    val paging = result.getOrNull() ?: break
+                    allArtists.addAll(paging.items)
+                    offset += pageSize
+                } while (allArtists.size < paging.total && paging.items.isNotEmpty())
+
+                if (allArtists.isNotEmpty()) {
+                    cachedFollowedArtists = allArtists
+                    followedArtistsRefreshMs = System.currentTimeMillis()
+                    persistFollowedArtistsToDataStore(context)
+                    Timber.d("$TAG: Followed artists loaded — ${allArtists.size} artists from GQL")
+                } else {
+                    Timber.w("$TAG: GQL myArtists returned empty, falling back")
+                }
+            } catch (e: Exception) {
+                Timber.w(e, "$TAG: GQL myArtists failed, falling back")
+            }
+
+            // Fallback: if GQL failed and no cache, use top artists
+            if (cachedFollowedArtists.isEmpty()) {
+                Timber.d("$TAG: Falling back to top artists for followed artists")
+                return getTopArtists(context, database, limit)
+            }
+        }
+        return cachedFollowedArtists.take(limit)
+    }
+
+    private suspend fun persistFollowedArtistsToDataStore(context: Context) {
+        try {
+            val artistsJson = json.encodeToString(CachedArtistList(cachedFollowedArtists.take(200)))
+            context.dataStore.edit { prefs ->
+                prefs[CACHE_KEY_FOLLOWED_ARTISTS] = artistsJson
+                prefs[CACHE_KEY_FOLLOWED_TS] = System.currentTimeMillis()
+            }
+        } catch (e: Exception) {
+            Timber.w(e, "$TAG: Failed to persist followed artists")
+        }
+    }
+
+    private suspend fun restoreFollowedArtistsFromDataStore(context: Context) {
+        try {
+            val prefs = context.dataStore.data.first()
+            val artistsJson = prefs[CACHE_KEY_FOLLOWED_ARTISTS] ?: return
+            val timestamp = prefs[CACHE_KEY_FOLLOWED_TS] ?: 0L
+            val parsed = json.decodeFromString<CachedArtistList>(artistsJson)
+            if (parsed.artists.isNotEmpty()) {
+                cachedFollowedArtists = parsed.artists
+                followedArtistsRefreshMs = timestamp
+                Timber.d("$TAG: Restored followed artists from DataStore — ${parsed.artists.size} artists (age: ${(System.currentTimeMillis() - timestamp) / 60000}min)")
+            }
+        } catch (e: Exception) {
+            Timber.w(e, "$TAG: Failed to restore followed artists from DataStore")
+        }
+    }
+
+    /**
+     * Returns a set of normalized artist names that are "related" to the user's
+     * followed artists. Built from Spotify GQL queryArtistOverview relatedContent
+     * for the top followed artists. Used to filter YouTube new releases for the
+     * Discover tab.
+     */
+    suspend fun getRelatedArtistNames(
+        context: Context,
+        database: MusicDatabase? = null,
+        seedLimit: Int = 10,
+    ): Set<String> {
+        if (System.currentTimeMillis() - relatedArtistsRefreshMs < RELATED_ARTISTS_TTL_MS &&
+            cachedRelatedArtistNames.isNotEmpty()
+        ) return cachedRelatedArtistNames
+
+        relatedArtistsMutex.withLock {
+            if (System.currentTimeMillis() - relatedArtistsRefreshMs < RELATED_ARTISTS_TTL_MS &&
+                cachedRelatedArtistNames.isNotEmpty()
+            ) return cachedRelatedArtistNames
+
+            if (cachedRelatedArtistNames.isEmpty()) {
+                restoreRelatedArtistNamesFromDataStore(context)
+                if (System.currentTimeMillis() - relatedArtistsRefreshMs < RELATED_ARTISTS_TTL_MS &&
+                    cachedRelatedArtistNames.isNotEmpty()
+                ) return cachedRelatedArtistNames
+            }
+
+            try {
+                val followed = getFollowedArtists(context, database, limit = seedLimit)
+                if (followed.isEmpty()) return cachedRelatedArtistNames
+
+                val allNames = java.util.Collections.synchronizedSet(mutableSetOf<String>())
+
+                coroutineScope {
+                    followed.take(seedLimit).map { artist ->
+                        async(Dispatchers.IO) {
+                            try {
+                                Spotify.artistRelatedArtists(artist.id).onSuccess { related ->
+                                    related.forEach { relArtist ->
+                                        allNames.add(normalizeArtistName(relArtist.name))
+                                    }
+                                }
+                            } catch (e: Exception) {
+                                Timber.w(e, "$TAG: Failed to get related artists for ${artist.name}")
+                            }
+                        }
+                    }.awaitAll()
+                }
+
+                if (allNames.isNotEmpty()) {
+                    cachedRelatedArtistNames = allNames.toSet()
+                    relatedArtistsRefreshMs = System.currentTimeMillis()
+                    persistRelatedArtistNamesToDataStore(context)
+                    Timber.d("$TAG: Related artist names cached — ${allNames.size} names from ${followed.take(seedLimit).size} seeds")
+                }
+            } catch (e: Exception) {
+                Timber.w(e, "$TAG: Failed to build related artist names cache")
+            }
+        }
+        return cachedRelatedArtistNames
+    }
+
+    fun normalizeArtistName(name: String): String =
+        name.lowercase(java.util.Locale.ROOT)
+            .replace(Regex("[^a-z0-9\\s]"), "")
+            .replace(Regex("\\s+"), " ")
+            .trim()
+
+    private suspend fun persistRelatedArtistNamesToDataStore(context: Context) {
+        try {
+            val namesJson = json.encodeToString(cachedRelatedArtistNames.toList())
+            context.dataStore.edit { prefs ->
+                prefs[CACHE_KEY_RELATED_NAMES] = namesJson
+                prefs[CACHE_KEY_RELATED_TS] = System.currentTimeMillis()
+            }
+        } catch (e: Exception) {
+            Timber.w(e, "$TAG: Failed to persist related artist names")
+        }
+    }
+
+    private suspend fun restoreRelatedArtistNamesFromDataStore(context: Context) {
+        try {
+            val prefs = context.dataStore.data.first()
+            val namesJson = prefs[CACHE_KEY_RELATED_NAMES] ?: return
+            val timestamp = prefs[CACHE_KEY_RELATED_TS] ?: 0L
+            val parsed = json.decodeFromString<List<String>>(namesJson)
+            if (parsed.isNotEmpty()) {
+                cachedRelatedArtistNames = parsed.toSet()
+                relatedArtistsRefreshMs = timestamp
+                Timber.d("$TAG: Restored related artist names from DataStore — ${parsed.size} names (age: ${(System.currentTimeMillis() - timestamp) / 60000}min)")
+            }
+        } catch (e: Exception) {
+            Timber.w(e, "$TAG: Failed to restore related artist names from DataStore")
+        }
+    }
+
+    /**
      * Forces a cache refresh regardless of TTL.
      */
     suspend fun forceRefresh(context: Context, database: MusicDatabase? = null) {
@@ -110,6 +309,10 @@ object SpotifyProfileCache {
         lastRefreshMs = 0L
         cachedTracks = emptyList()
         cachedArtists = emptyList()
+        cachedFollowedArtists = emptyList()
+        followedArtistsRefreshMs = 0L
+        cachedRelatedArtistNames = emptySet()
+        relatedArtistsRefreshMs = 0L
     }
 
     private fun effectiveTtl(): Long =

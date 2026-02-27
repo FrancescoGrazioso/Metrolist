@@ -465,6 +465,80 @@ object Spotify {
             )
         }
 
+    // ── Library Artists (GQL: libraryV3 with Artists filter) ───────────
+
+    suspend fun myArtists(
+        limit: Int = 50,
+        offset: Int = 0,
+    ): Result<SpotifyPaging<SpotifyArtist>> =
+        runCatching {
+            val vars =
+                buildJsonObject {
+                    putJsonArray("filters") { add("Artists") }
+                    put("order", null as String?)
+                    put("textFilter", "")
+                    putJsonArray("features") {
+                        add("LIKED_SONGS")
+                        add("YOUR_EPISODES_V2")
+                        add("PRERELEASES")
+                        add("EVENTS")
+                    }
+                    put("limit", limit)
+                    put("offset", offset)
+                    put("flatten", false)
+                    putJsonArray("expandedFolders") {}
+                    put("folderUri", null as String?)
+                    put("includeFoldersWhenFlattening", true)
+                }
+
+            val response =
+                graphqlPost(
+                    operationName = "libraryV3",
+                    sha256Hash = "2de10199b2441d6e4ae875f27d2db361020c399fb10b03951120223fbed10b08",
+                    variables = vars,
+                )
+
+            val libraryData =
+                response.obj("data")?.obj("me")?.obj("libraryV3")
+                    ?: throw SpotifyException(500, "Invalid libraryV3 response")
+
+            val totalCount = libraryData.int("totalCount") ?: 0
+            val pagingInfo = libraryData.obj("pagingInfo")
+
+            val artists =
+                libraryData.arr("items")?.mapNotNull { itemElem ->
+                    val wrapper = itemElem.jsonObject.obj("item") ?: return@mapNotNull null
+                    val typeName = wrapper.str("__typename") ?: ""
+                    if (!typeName.contains("Artist", ignoreCase = true)) return@mapNotNull null
+                    val data = wrapper.obj("data") ?: return@mapNotNull null
+
+                    val artistUri = wrapper.str("_uri") ?: data.str("uri") ?: return@mapNotNull null
+                    val artistId = artistUri.substringAfterLast(":")
+
+                    val name = data.obj("profile")?.str("name")
+                        ?: data.str("name")
+                        ?: return@mapNotNull null
+
+                    val images = data.obj("visuals")?.obj("avatarImage")
+                        ?.arr("sources")?.let { parseGqlImages(it) }
+                        ?: emptyList()
+
+                    SpotifyArtist(
+                        id = artistId,
+                        name = name,
+                        images = images,
+                        uri = artistUri,
+                    )
+                } ?: emptyList()
+
+            SpotifyPaging(
+                items = artists,
+                total = totalCount,
+                limit = pagingInfo?.int("limit") ?: limit,
+                offset = pagingInfo?.int("offset") ?: offset,
+            )
+        }
+
     // ── Playlist detail (GQL: fetchPlaylist) ────────────────────────────
 
     suspend fun playlist(playlistId: String): Result<SpotifyPlaylist> =
@@ -973,6 +1047,46 @@ object Spotify {
                 }
 
             ArtistTopTracksResponse(tracks = tracks)
+        }
+
+    /**
+     * Extracts related artists from the GQL queryArtistOverview endpoint.
+     * This avoids the rate-limited REST /related-artists endpoint entirely.
+     */
+    suspend fun artistRelatedArtists(artistId: String): Result<List<SpotifyArtist>> =
+        runCatching {
+            val vars =
+                buildJsonObject {
+                    put("uri", "spotify:artist:$artistId")
+                    put("locale", "")
+                }
+
+            val response =
+                graphqlPost(
+                    operationName = "queryArtistOverview",
+                    sha256Hash = "446130b4a0aa6522a686aafccddb0ae849165b5e0436fd802f96e0243617b5d8",
+                    variables = vars,
+                )
+
+            val artistData =
+                response.obj("data")?.obj("artistUnion")
+                    ?: throw SpotifyException(500, "Invalid queryArtistOverview response")
+
+            val relatedItems =
+                artistData.obj("relatedContent")
+                    ?.obj("relatedArtists")
+                    ?.arr("items")
+                    ?: JsonArray(emptyList())
+
+            relatedItems.mapNotNull { elem ->
+                val uri = elem.jsonObject.str("uri") ?: return@mapNotNull null
+                val id = uri.substringAfterLast(":")
+                val name = elem.jsonObject.obj("profile")?.str("name") ?: return@mapNotNull null
+                val images = parseGqlImages(
+                    elem.jsonObject.obj("visuals")?.obj("avatarImage")?.arr("sources")
+                )
+                SpotifyArtist(id = id, name = name, images = images, uri = uri)
+            }
         }
 
     // ── Related Artists (REST fallback) ─────────────────────────────────

@@ -2303,6 +2303,9 @@ fun HomeScreen(
                         item(key = "spotify_section_title_$index") {
                             NavigationTitle(
                                 title = resolveSpotifySectionTitle(section),
+                                onClick = if (section.title == "spotify_new_releases") {
+                                    { navController.navigate("new_release") }
+                                } else null,
                                 modifier = Modifier.animateItem()
                             )
                         }

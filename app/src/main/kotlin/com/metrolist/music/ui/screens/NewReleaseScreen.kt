@@ -9,6 +9,7 @@ import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.GridItemSpan
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -34,6 +35,8 @@ import com.metrolist.music.R
 import com.metrolist.music.constants.GridItemSize
 import com.metrolist.music.constants.GridItemsSizeKey
 import com.metrolist.music.constants.GridThumbnailHeight
+import com.metrolist.music.models.ReleaseSource
+import com.metrolist.music.ui.component.ChipsRow
 import com.metrolist.music.ui.component.IconButton
 import com.metrolist.music.ui.component.LocalMenuState
 import com.metrolist.music.ui.component.YouTubeGridItem
@@ -42,6 +45,7 @@ import com.metrolist.music.ui.component.shimmer.ShimmerHost
 import com.metrolist.music.ui.menu.YouTubeAlbumMenu
 import com.metrolist.music.ui.utils.backToMain
 import com.metrolist.music.utils.rememberEnumPreference
+import com.metrolist.music.viewmodels.NewReleaseTab
 import com.metrolist.music.viewmodels.NewReleaseViewModel
 
 @OptIn(ExperimentalFoundationApi::class, ExperimentalMaterial3Api::class)
@@ -57,19 +61,45 @@ fun NewReleaseScreen(
     val isPlaying by playerConnection.isEffectivelyPlaying.collectAsState()
     val mediaMetadata by playerConnection.mediaMetadata.collectAsState()
 
-    val newReleaseAlbums by viewModel.newReleaseAlbums.collectAsState()
+    val displayedReleases by viewModel.displayedReleases.collectAsState()
+    val selectedTab by viewModel.selectedTab.collectAsState()
+    val isLoading by viewModel.isLoading.collectAsState()
+    val followingCount by viewModel.followingCount.collectAsState()
+    val discoverCount by viewModel.discoverCount.collectAsState()
 
     val coroutineScope = rememberCoroutineScope()
     val gridItemSize by rememberEnumPreference(GridItemsSizeKey, GridItemSize.BIG)
+
+    val forYouLabel = stringResource(R.string.new_releases_for_you)
+    val followingLabel = stringResource(R.string.new_releases_following)
+    val discoverLabel = stringResource(R.string.new_releases_discover)
+
+    val chips = listOf(
+        NewReleaseTab.FOR_YOU to forYouLabel,
+        NewReleaseTab.FOLLOWING to "$followingLabel (${followingCount.size})",
+        NewReleaseTab.DISCOVER to "$discoverLabel (${discoverCount.size})",
+    )
 
     LazyVerticalGrid(
         columns = GridCells.Adaptive(minSize = GridThumbnailHeight + if (gridItemSize == GridItemSize.BIG) 24.dp else (-24).dp),
         contentPadding = LocalPlayerAwareWindowInsets.current.asPaddingValues(),
     ) {
+        item(
+            key = "filter_chips",
+            span = { GridItemSpan(maxLineSpan) },
+        ) {
+            ChipsRow(
+                chips = chips,
+                currentValue = selectedTab,
+                onValueUpdate = { viewModel.selectTab(it) },
+            )
+        }
+
         items(
-            items = newReleaseAlbums.distinctBy { it.id },
-            key = { it.id },
-        ) { album ->
+            items = displayedReleases.distinctBy { it.albumItem.id },
+            key = { it.albumItem.id },
+        ) { releaseItem ->
+            val album = releaseItem.albumItem
             YouTubeGridItem(
                 item = album,
                 isActive = mediaMetadata?.album?.id == album.id,
@@ -80,7 +110,13 @@ fun NewReleaseScreen(
                 Modifier
                     .combinedClickable(
                         onClick = {
-                            navController.navigate("album/${album.id}")
+                            if (releaseItem.source == ReleaseSource.SPOTIFY &&
+                                releaseItem.spotifyAlbumId != null
+                            ) {
+                                navController.navigate("spotify_album/${releaseItem.spotifyAlbumId}")
+                            } else {
+                                navController.navigate("album/${album.id}")
+                            }
                         },
                         onLongClick = {
                             haptic.performHapticFeedback(HapticFeedbackType.LongPress)
@@ -96,7 +132,7 @@ fun NewReleaseScreen(
             )
         }
 
-        if (newReleaseAlbums.isEmpty()) {
+        if (isLoading) {
             items(8) {
                 ShimmerHost {
                     GridItemPlaceHolder(fillMaxWidth = true)

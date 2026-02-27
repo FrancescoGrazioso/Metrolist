@@ -407,6 +407,9 @@
     <string name="spotify_discover">More Artists You Love</string>
     <string name="spotify_your_playlists">Your Playlists</string>
     <string name="spotify_new_releases">New Releases</string>
+    <string name="new_releases_for_you">For You</string>
+    <string name="new_releases_following">Following</string>
+    <string name="new_releases_discover">Discover</string>
     <string name="spotify_because_you_like">Because you like %s</string>
 
     <string name="details_desc">View the song\'s information</string>
