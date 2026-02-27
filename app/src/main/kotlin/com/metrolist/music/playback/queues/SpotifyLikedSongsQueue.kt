@@ -33,7 +33,9 @@ class SpotifyLikedSongsQueue(
 
     companion object {
         private const val SPOTIFY_PAGE_SIZE = 50
-        private const val RESOLVE_BATCH_SIZE = 10
+        private const val RESOLVE_BATCH_SIZE = 20
+        private const val INITIAL_WINDOW_BEFORE = 5
+        private const val INITIAL_WINDOW_AFTER = 19
     }
 
     // All Spotify tracks fetched so far (may span multiple API pages)
@@ -49,7 +51,6 @@ class SpotifyLikedSongsQueue(
 
     override suspend fun getInitialStatus(): Queue.Status = withContext(Dispatchers.IO) {
         try {
-            // Fetch the first API page to know the total and get the initial batch
             val result = Spotify.likedSongs(limit = SPOTIFY_PAGE_SIZE, offset = 0).getOrThrow()
             apiTotal = result.total
             val fetched = result.items.map { it.track }.filter { !it.isLocal }
@@ -57,46 +58,44 @@ class SpotifyLikedSongsQueue(
             apiFetchOffset = result.items.size
             apiHasMore = apiFetchOffset < apiTotal
 
-            // If startIndex is beyond the first page, fetch more pages until we have it
             while (startIndex >= allTracks.size && apiHasMore) {
                 fetchNextApiPage()
             }
 
-            // Resolve only the selected track for immediate playback
             val targetIndex = startIndex.coerceIn(0, (allTracks.size - 1).coerceAtLeast(0))
-            val targetTrack = allTracks.getOrNull(targetIndex)
-            val resolvedItem = targetTrack?.let { mapper.resolveToMediaItem(it) }
 
-            if (resolvedItem == null) {
-                Timber.w("SpotifyLikedSongsQueue: Could not resolve track at index $targetIndex")
-                return@withContext Queue.Status(
-                    title = null,
-                    items = emptyList(),
-                    mediaItemIndex = 0,
-                )
+            // Resolve a window of tracks around the selected one
+            val windowStart = (targetIndex - INITIAL_WINDOW_BEFORE).coerceAtLeast(0)
+            val windowEnd = (targetIndex + INITIAL_WINDOW_AFTER + 1).coerceAtMost(allTracks.size)
+            val windowTracks = allTracks.subList(windowStart, windowEnd)
+
+            val resolvedItems = coroutineScope {
+                windowTracks.map { track -> async { mapper.resolveToMediaItem(track) } }
+                    .awaitAll()
+                    .filterNotNull()
             }
 
-            // Mark that we've "resolved" up through startIndex,
-            // but skip everything before startIndex for resolution
-            // (we'll resolve them in nextPage calls for backward navigation).
-            // Start resolving forward from the track after the selected one.
-            resolveOffset = targetIndex + 1
+            if (resolvedItems.isEmpty()) {
+                Timber.w("SpotifyLikedSongsQueue: Could not resolve any track in initial window")
+                return@withContext Queue.Status(title = null, items = emptyList(), mediaItemIndex = 0)
+            }
 
-            Timber.d("SpotifyLikedSongsQueue: Resolved track '${ targetTrack.name}' instantly, " +
-                "${allTracks.size} tracks fetched, total=$apiTotal")
+            resolveOffset = windowEnd
+
+            val mediaItemIndex = (targetIndex - windowStart)
+                .coerceIn(0, (resolvedItems.size - 1).coerceAtLeast(0))
+
+            Timber.d("SpotifyLikedSongsQueue: Resolved ${resolvedItems.size} tracks " +
+                "(window $windowStart..$windowEnd, target=$targetIndex, total=$apiTotal)")
 
             Queue.Status(
                 title = null,
-                items = listOf(resolvedItem),
-                mediaItemIndex = 0,
+                items = resolvedItems,
+                mediaItemIndex = mediaItemIndex,
             )
         } catch (e: Exception) {
             Timber.e(e, "SpotifyLikedSongsQueue: Failed initial fetch")
-            Queue.Status(
-                title = null,
-                items = emptyList(),
-                mediaItemIndex = 0,
-            )
+            Queue.Status(title = null, items = emptyList(), mediaItemIndex = 0)
         }
     }
 
