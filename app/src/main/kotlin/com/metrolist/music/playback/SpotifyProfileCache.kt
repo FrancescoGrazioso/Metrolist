@@ -20,7 +20,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
-import kotlinx.coroutines.delay
+
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -52,7 +52,6 @@ object SpotifyProfileCache {
     private const val CACHE_TTL_DEGRADED_MS = 30L * 60 * 1000 // 30min when only GQL data — retry sooner
     private const val REST_COOLDOWN_MS = 60L * 1000 // 1 min cooldown after 429
     private const val REST_CALL_TIMEOUT_MS = 8000L // Max wait for a single REST call
-    private const val REST_RETRY_DELAY_MS = 1000L
 
     private val CACHE_KEY_TRACKS = stringPreferencesKey("spotify_profile_tracks_json")
     private val CACHE_KEY_ARTISTS = stringPreferencesKey("spotify_profile_artists_json")
@@ -143,33 +142,24 @@ object SpotifyProfileCache {
     }
 
     /**
-     * Attempts a REST call with one retry after a short backoff.
-     * Returns null only if both attempts fail or time out.
+     * Single-attempt REST call with timeout. Fail-fast on 429 — retrying is
+     * counterproductive because the Spotify REST client has its own internal
+     * retry/backoff that already consumes most of the timeout budget.
      */
-    private suspend fun <T> retryRestCall(
+    private suspend fun <T> singleRestCall(
         label: String,
         block: suspend () -> Result<T>,
-    ): Result<T>? {
-        for (attempt in 1..2) {
-            val result = try {
-                withTimeoutOrNull(REST_CALL_TIMEOUT_MS) { block() }
-            } catch (e: Exception) {
-                Timber.w(e, "$TAG: $label attempt $attempt threw")
-                null
-            }
-            if (result != null) return result
-            if (attempt == 1) {
-                Timber.d("$TAG: $label attempt 1 timed out, retrying after ${REST_RETRY_DELAY_MS}ms")
-                delay(REST_RETRY_DELAY_MS)
-            }
-        }
-        return null
+    ): Result<T>? = try {
+        withTimeoutOrNull(REST_CALL_TIMEOUT_MS) { block() }
+    } catch (e: Exception) {
+        Timber.w(e, "$TAG: $label failed")
+        null
     }
 
     /**
      * Tries to refresh profile from sources in priority order:
      * 1. GQL liked songs (always available, good proxy for preferences)
-     * 2. REST top tracks/artists (best data, may 429) — with retry
+     * 2. REST top tracks/artists (best data, may 429) — single attempt, fail-fast
      * 3. Local DB play history (used to reorder GQL data when REST fails)
      */
     private suspend fun refreshFromSources(
@@ -206,7 +196,7 @@ object SpotifyProfileCache {
         // ── Tier 2: REST top tracks/artists (may 429, skip if recently failed) ──
         val restAvailable = System.currentTimeMillis() - lastRestFailMs > REST_COOLDOWN_MS
         if (restAvailable) {
-            val restTracksResult = retryRestCall("topTracks") {
+            val restTracksResult = singleRestCall("topTracks") {
                 Spotify.topTracks(timeRange = "short_term", limit = 50)
             }
 
@@ -227,16 +217,16 @@ object SpotifyProfileCache {
                         }
                     }
                 }.onFailure {
-                    Timber.w("$TAG: REST topTracks hit error, entering cooldown")
+                    Timber.w("$TAG: REST topTracks hit 429/error, entering cooldown")
                     lastRestFailMs = System.currentTimeMillis()
                 }
             } else {
-                Timber.w("$TAG: REST topTracks timed out after retries, entering cooldown")
+                Timber.w("$TAG: REST topTracks timed out, entering cooldown")
                 lastRestFailMs = System.currentTimeMillis()
             }
 
             if (System.currentTimeMillis() - lastRestFailMs > REST_COOLDOWN_MS) {
-                val restArtistsResult = retryRestCall("topArtists") {
+                val restArtistsResult = singleRestCall("topArtists") {
                     Spotify.topArtists(timeRange = "medium_term", limit = 50)
                 }
 
@@ -252,11 +242,11 @@ object SpotifyProfileCache {
                             acc.images = artist.images
                         }
                     }.onFailure {
-                        Timber.w("$TAG: REST topArtists hit error, entering cooldown")
+                        Timber.w("$TAG: REST topArtists hit 429/error, entering cooldown")
                         lastRestFailMs = System.currentTimeMillis()
                     }
                 } else {
-                    Timber.w("$TAG: REST topArtists timed out after retries, entering cooldown")
+                    Timber.w("$TAG: REST topArtists timed out, entering cooldown")
                     lastRestFailMs = System.currentTimeMillis()
                 }
             }

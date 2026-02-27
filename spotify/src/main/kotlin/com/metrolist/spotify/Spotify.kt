@@ -233,6 +233,7 @@ object Spotify {
 
     private suspend inline fun <reified T> authenticatedGet(
         endpoint: String,
+        failFastOn429: Boolean = false,
         crossinline block: io.ktor.client.request.HttpRequestBuilder.() -> Unit = {},
     ): T {
         val token =
@@ -240,8 +241,8 @@ object Spotify {
                 log("E", "REST $endpoint — no token")
             }
 
-        val maxRetries = 3
-        val maxRetryDelaySec = 10L
+        val maxRetries = if (failFastOn429) 1 else 3
+        val maxRetryDelaySec = 3L
         for (attempt in 0 until maxRetries) {
             log(
                 "D",
@@ -260,8 +261,8 @@ object Spotify {
             }
             if (response.status == HttpStatusCode.TooManyRequests) {
                 val retryAfter = response.headers["Retry-After"]?.toLongOrNull() ?: (2L * (attempt + 1))
-                if (retryAfter > maxRetryDelaySec) {
-                    log("W", "REST $endpoint -> 429, Retry-After ${retryAfter}s too long, failing fast")
+                if (failFastOn429 || retryAfter > maxRetryDelaySec) {
+                    log("W", "REST $endpoint -> 429, failing fast (retryAfter=${retryAfter}s)")
                     throw SpotifyException(429, "Rate limited", retryAfterSec = retryAfter)
                 }
                 if (attempt < maxRetries - 1) {
@@ -600,7 +601,7 @@ object Spotify {
         offset: Int = 0,
     ): Result<SpotifyPaging<SpotifyTrack>> =
         runCatching {
-            authenticatedGet("me/top/tracks") {
+            authenticatedGet("me/top/tracks", failFastOn429 = true) {
                 parameter("time_range", timeRange)
                 parameter("limit", limit)
                 parameter("offset", offset)
@@ -615,7 +616,7 @@ object Spotify {
         offset: Int = 0,
     ): Result<SpotifyPaging<SpotifyArtist>> =
         runCatching {
-            authenticatedGet("me/top/artists") {
+            authenticatedGet("me/top/artists", failFastOn429 = true) {
                 parameter("time_range", timeRange)
                 parameter("limit", limit)
                 parameter("offset", offset)
