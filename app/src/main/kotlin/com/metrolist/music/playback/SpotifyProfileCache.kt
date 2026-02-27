@@ -6,6 +6,7 @@
 package com.metrolist.music.playback
 
 import android.content.Context
+import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
@@ -19,6 +20,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -46,13 +48,16 @@ import java.time.ZoneOffset
 object SpotifyProfileCache {
 
     private const val TAG = "SpotifyProfileCache"
-    private const val CACHE_TTL_MS = 6L * 60 * 60 * 1000 // 6 hours
-    private const val REST_COOLDOWN_MS = 5L * 60 * 1000 // 5 min cooldown after 429
-    private const val REST_CALL_TIMEOUT_MS = 3000L // Max wait for a single REST call
+    private const val CACHE_TTL_FULL_MS = 6L * 60 * 60 * 1000 // 6h when REST data is available
+    private const val CACHE_TTL_DEGRADED_MS = 30L * 60 * 1000 // 30min when only GQL data — retry sooner
+    private const val REST_COOLDOWN_MS = 60L * 1000 // 1 min cooldown after 429
+    private const val REST_CALL_TIMEOUT_MS = 8000L // Max wait for a single REST call
+    private const val REST_RETRY_DELAY_MS = 1000L
 
     private val CACHE_KEY_TRACKS = stringPreferencesKey("spotify_profile_tracks_json")
     private val CACHE_KEY_ARTISTS = stringPreferencesKey("spotify_profile_artists_json")
     private val CACHE_KEY_TIMESTAMP = longPreferencesKey("spotify_profile_cache_ts")
+    private val CACHE_KEY_HAD_REST = booleanPreferencesKey("spotify_profile_had_rest")
 
     private val json = Json { ignoreUnknownKeys = true; encodeDefaults = true }
     private val refreshMutex = Mutex()
@@ -61,6 +66,7 @@ object SpotifyProfileCache {
     @Volatile private var cachedArtists: List<SpotifyArtist> = emptyList()
     @Volatile private var lastRefreshMs: Long = 0L
     @Volatile private var lastRestFailMs: Long = 0L
+    @Volatile private var lastRefreshHadRest: Boolean = false
 
     @Serializable
     private data class CachedTrackList(val tracks: List<SpotifyTrack>)
@@ -107,14 +113,17 @@ object SpotifyProfileCache {
         cachedArtists = emptyList()
     }
 
+    private fun effectiveTtl(): Long =
+        if (lastRefreshHadRest) CACHE_TTL_FULL_MS else CACHE_TTL_DEGRADED_MS
+
     private suspend fun ensureLoaded(context: Context, database: MusicDatabase?) {
-        if (System.currentTimeMillis() - lastRefreshMs < CACHE_TTL_MS &&
+        if (System.currentTimeMillis() - lastRefreshMs < effectiveTtl() &&
             cachedTracks.isNotEmpty()
         ) return
 
         refreshMutex.withLock {
             // Double-check after acquiring lock
-            if (System.currentTimeMillis() - lastRefreshMs < CACHE_TTL_MS &&
+            if (System.currentTimeMillis() - lastRefreshMs < effectiveTtl() &&
                 cachedTracks.isNotEmpty()
             ) return
 
@@ -124,7 +133,7 @@ object SpotifyProfileCache {
             }
 
             // If DataStore data is still fresh, no network call needed
-            if (System.currentTimeMillis() - lastRefreshMs < CACHE_TTL_MS &&
+            if (System.currentTimeMillis() - lastRefreshMs < effectiveTtl() &&
                 cachedTracks.isNotEmpty()
             ) return
 
@@ -134,10 +143,34 @@ object SpotifyProfileCache {
     }
 
     /**
+     * Attempts a REST call with one retry after a short backoff.
+     * Returns null only if both attempts fail or time out.
+     */
+    private suspend fun <T> retryRestCall(
+        label: String,
+        block: suspend () -> Result<T>,
+    ): Result<T>? {
+        for (attempt in 1..2) {
+            val result = try {
+                withTimeoutOrNull(REST_CALL_TIMEOUT_MS) { block() }
+            } catch (e: Exception) {
+                Timber.w(e, "$TAG: $label attempt $attempt threw")
+                null
+            }
+            if (result != null) return result
+            if (attempt == 1) {
+                Timber.d("$TAG: $label attempt 1 timed out, retrying after ${REST_RETRY_DELAY_MS}ms")
+                delay(REST_RETRY_DELAY_MS)
+            }
+        }
+        return null
+    }
+
+    /**
      * Tries to refresh profile from sources in priority order:
      * 1. GQL liked songs (always available, good proxy for preferences)
-     * 2. REST top tracks/artists (best data, may 429)
-     * 3. Local DB play history (always available after first use)
+     * 2. REST top tracks/artists (best data, may 429) — with retry
+     * 3. Local DB play history (used to reorder GQL data when REST fails)
      */
     private suspend fun refreshFromSources(
         context: Context,
@@ -147,6 +180,7 @@ object SpotifyProfileCache {
 
         val tracks = mutableListOf<SpotifyTrack>()
         val artistFrequency = mutableMapOf<String, ArtistAccumulator>()
+        var restSucceeded = false
 
         // ── Tier 1: GQL liked songs (no rate limit) ──
         try {
@@ -172,14 +206,8 @@ object SpotifyProfileCache {
         // ── Tier 2: REST top tracks/artists (may 429, skip if recently failed) ──
         val restAvailable = System.currentTimeMillis() - lastRestFailMs > REST_COOLDOWN_MS
         if (restAvailable) {
-            val restTracksResult = try {
-                withTimeoutOrNull(REST_CALL_TIMEOUT_MS) {
-                    Spotify.topTracks(timeRange = "short_term", limit = 50)
-                }
-            } catch (e: Exception) {
-                Timber.w(e, "$TAG: REST topTracks failed")
-                lastRestFailMs = System.currentTimeMillis()
-                null
+            val restTracksResult = retryRestCall("topTracks") {
+                Spotify.topTracks(timeRange = "short_term", limit = 50)
             }
 
             if (restTracksResult != null) {
@@ -188,6 +216,7 @@ object SpotifyProfileCache {
                     val merged = paging.items + tracks.filter { t -> paging.items.none { it.id == t.id } }
                     tracks.clear()
                     tracks.addAll(merged)
+                    restSucceeded = true
 
                     for (track in paging.items) {
                         for (artist in track.artists) {
@@ -202,19 +231,13 @@ object SpotifyProfileCache {
                     lastRestFailMs = System.currentTimeMillis()
                 }
             } else {
-                Timber.w("$TAG: REST topTracks timed out, entering cooldown")
+                Timber.w("$TAG: REST topTracks timed out after retries, entering cooldown")
                 lastRestFailMs = System.currentTimeMillis()
             }
 
             if (System.currentTimeMillis() - lastRestFailMs > REST_COOLDOWN_MS) {
-                val restArtistsResult = try {
-                    withTimeoutOrNull(REST_CALL_TIMEOUT_MS) {
-                        Spotify.topArtists(timeRange = "medium_term", limit = 50)
-                    }
-                } catch (e: Exception) {
-                    Timber.w(e, "$TAG: REST topArtists failed")
-                    lastRestFailMs = System.currentTimeMillis()
-                    null
+                val restArtistsResult = retryRestCall("topArtists") {
+                    Spotify.topArtists(timeRange = "medium_term", limit = 50)
                 }
 
                 if (restArtistsResult != null) {
@@ -233,7 +256,7 @@ object SpotifyProfileCache {
                         lastRestFailMs = System.currentTimeMillis()
                     }
                 } else {
-                    Timber.w("$TAG: REST topArtists timed out, entering cooldown")
+                    Timber.w("$TAG: REST topArtists timed out after retries, entering cooldown")
                     lastRestFailMs = System.currentTimeMillis()
                 }
             }
@@ -241,16 +264,20 @@ object SpotifyProfileCache {
             Timber.d("$TAG: Skipping REST calls — in cooldown (${REST_COOLDOWN_MS / 1000}s)")
         }
 
-        // ── Tier 3: Local DB play history (always available) ──
-        if (tracks.isEmpty() && database != null) {
+        // ── Tier 3: Local DB play history ──
+        // When REST failed but GQL liked songs are available, use local play data
+        // to reorder tracks by actual listening frequency instead of liked-date order.
+        // When tracks are completely empty, use local data as the sole source.
+        if (database != null) {
             try {
                 val fromTimestamp = LocalDateTime.now()
                     .minusMonths(3)
                     .toInstant(ZoneOffset.UTC)
                     .toEpochMilli()
-                val localSongs = database.mostPlayedSongs(fromTimestamp, limit = 50).first()
-                if (localSongs.isNotEmpty()) {
-                    Timber.d("$TAG: Local DB returned ${localSongs.size} most played songs")
+                val localSongs = database.mostPlayedSongs(fromTimestamp, limit = 100).first()
+
+                if (tracks.isEmpty() && localSongs.isNotEmpty()) {
+                    Timber.d("$TAG: No GQL/REST data — using ${localSongs.size} local songs as sole source")
                     for (song in localSongs) {
                         tracks.add(
                             SpotifyTrack(
@@ -271,6 +298,10 @@ object SpotifyProfileCache {
                             }.count++
                         }
                     }
+                } else if (!restSucceeded && tracks.isNotEmpty() && localSongs.isNotEmpty()) {
+                    Timber.d("$TAG: REST failed — reordering ${tracks.size} GQL tracks using ${localSongs.size} local play ranks")
+                    val localRank = localSongs.withIndex().associate { (idx, song) -> song.song.id to idx }
+                    tracks.sortBy { track -> localRank[track.id] ?: Int.MAX_VALUE }
                 }
             } catch (e: Exception) {
                 Timber.w(e, "$TAG: Local DB fallback failed")
@@ -333,8 +364,10 @@ object SpotifyProfileCache {
         cachedTracks = dedupedTracks
         cachedArtists = enrichedArtists
         lastRefreshMs = System.currentTimeMillis()
+        lastRefreshHadRest = restSucceeded
 
-        Timber.d("$TAG: Profile cached — ${dedupedTracks.size} tracks, ${enrichedArtists.size} artists")
+        val quality = if (restSucceeded) "full (REST)" else "degraded (GQL-only, TTL=${CACHE_TTL_DEGRADED_MS / 60000}min)"
+        Timber.d("$TAG: Profile cached — ${dedupedTracks.size} tracks, ${enrichedArtists.size} artists [$quality]")
 
         persistToDataStore(context)
         true
@@ -348,8 +381,9 @@ object SpotifyProfileCache {
                 prefs[CACHE_KEY_TRACKS] = tracksJson
                 prefs[CACHE_KEY_ARTISTS] = artistsJson
                 prefs[CACHE_KEY_TIMESTAMP] = System.currentTimeMillis()
+                prefs[CACHE_KEY_HAD_REST] = lastRefreshHadRest
             }
-            Timber.d("$TAG: Profile persisted to DataStore")
+            Timber.d("$TAG: Profile persisted to DataStore (hadRest=$lastRefreshHadRest)")
         } catch (e: Exception) {
             Timber.w(e, "$TAG: Failed to persist profile to DataStore")
         }
@@ -361,6 +395,7 @@ object SpotifyProfileCache {
             val tracksJson = prefs[CACHE_KEY_TRACKS] ?: return
             val artistsJson = prefs[CACHE_KEY_ARTISTS] ?: return
             val timestamp = prefs[CACHE_KEY_TIMESTAMP] ?: 0L
+            val hadRest = prefs[CACHE_KEY_HAD_REST] ?: false
 
             val parsed = json.decodeFromString<CachedTrackList>(tracksJson)
             val parsedArtists = json.decodeFromString<CachedArtistList>(artistsJson)
@@ -369,9 +404,10 @@ object SpotifyProfileCache {
                 cachedTracks = parsed.tracks
                 cachedArtists = parsedArtists.artists
                 lastRefreshMs = timestamp
+                lastRefreshHadRest = hadRest
                 Timber.d(
                     "$TAG: Restored from DataStore — ${cachedTracks.size} tracks, " +
-                        "${cachedArtists.size} artists (age: ${(System.currentTimeMillis() - timestamp) / 60000}min)"
+                        "${cachedArtists.size} artists (age: ${(System.currentTimeMillis() - timestamp) / 60000}min, hadRest=$hadRest)"
                 )
             }
         } catch (e: Exception) {
