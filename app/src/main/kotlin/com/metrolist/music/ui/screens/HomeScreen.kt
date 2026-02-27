@@ -2229,6 +2229,82 @@ fun HomeScreen(
                     }
                 }
 
+                // Spotify Home Sections (shown when Spotify home is active)
+                if (isSpotifyHome && spotifyHomeSections != null) {
+                    spotifyHomeSections?.forEachIndexed { index, section ->
+                        item(key = "spotify_section_title_$index") {
+                            NavigationTitle(
+                                title = resolveSpotifySectionTitle(section),
+                                modifier = Modifier.animateItem()
+                            )
+                        }
+
+                        item(key = "spotify_section_content_$index") {
+                            when (section.type) {
+                                SectionType.TRACKS -> {
+                                    SpotifyTrackSectionRow(
+                                        tracks = section.tracks,
+                                        horizontalItemWidth = horizontalLazyGridItemWidth,
+                                        isPlaying = isPlaying,
+                                        currentMediaId = mediaMetadata?.id,
+                                        onTrackClick = { track ->
+                                            playerConnection.playQueue(
+                                                SpotifyQueue(
+                                                    initialTrack = track,
+                                                    mapper = spotifyMapper,
+                                                    context = viewModel.context,
+                                                    database = database,
+                                                )
+                                            )
+                                        },
+                                        onTrackLongClick = { },
+                                        modifier = Modifier.animateItem(),
+                                    )
+                                }
+                                SectionType.ARTISTS -> {
+                                    SpotifyArtistSectionRow(
+                                        artists = section.artists,
+                                        onArtistClick = { artist ->
+                                            scope.launch(Dispatchers.IO) {
+                                                val ytResult = YouTube.search(
+                                                    artist.name,
+                                                    YouTube.SearchFilter.FILTER_ARTIST,
+                                                ).getOrNull()
+                                                val ytArtist = ytResult?.items
+                                                    ?.firstOrNull { it is ArtistItem }
+                                                if (ytArtist != null) {
+                                                    withContext(Dispatchers.Main) {
+                                                        navController.navigate("artist/${ytArtist.id}")
+                                                    }
+                                                }
+                                            }
+                                        },
+                                        modifier = Modifier.animateItem(),
+                                    )
+                                }
+                                SectionType.ALBUMS -> {
+                                    SpotifyAlbumSectionRow(
+                                        albums = section.albums,
+                                        onAlbumClick = { album ->
+                                            navController.navigate("spotify_album/${album.id}")
+                                        },
+                                        modifier = Modifier.animateItem(),
+                                    )
+                                }
+                                SectionType.PLAYLISTS -> {
+                                    SpotifyPlaylistSectionRow(
+                                        playlists = section.playlists,
+                                        onPlaylistClick = { playlist ->
+                                            navController.navigate("spotify_playlist/${playlist.id}")
+                                        },
+                                        modifier = Modifier.animateItem(),
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+
                 if (isLoading || homePage?.continuation != null && homePage?.sections?.isNotEmpty() == true) {
                     item(key = "loading_shimmer") {
                         ShimmerHost(
