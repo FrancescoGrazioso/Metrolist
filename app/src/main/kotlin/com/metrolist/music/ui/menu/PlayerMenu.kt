@@ -52,6 +52,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -84,7 +85,10 @@ import com.metrolist.music.constants.ListItemHeight
 import com.metrolist.music.listentogether.ConnectionState
 import com.metrolist.music.listentogether.ListenTogetherEvent
 import com.metrolist.music.models.MediaMetadata
+import com.metrolist.music.extensions.toMediaItem
 import com.metrolist.music.playback.ExoDownloadService
+import com.metrolist.music.playback.SpotifyYouTubeMapper
+import com.metrolist.music.ui.component.YouTubeMatchDialog
 import com.metrolist.music.ui.component.BottomSheetState
 import com.metrolist.music.ui.component.ListDialog
 import com.metrolist.music.ui.component.Material3MenuGroup
@@ -143,6 +147,51 @@ fun PlayerMenu(
     
     var showListenTogetherDialog by rememberSaveable {
         mutableStateOf(false)
+    }
+
+    var showYouTubeMatchDialog by rememberSaveable {
+        mutableStateOf(false)
+    }
+
+    val resolvedSpotifyMatch by produceState<com.metrolist.music.db.entities.SpotifyMatchEntity?>(
+        initialValue = null,
+        mediaMetadata.id,
+    ) {
+        kotlinx.coroutines.withContext(Dispatchers.IO) {
+            value = database.getSpotifyMatchByYouTubeId(mediaMetadata.id)
+        }
+    }
+
+    if (showYouTubeMatchDialog) {
+        val mapper = remember { SpotifyYouTubeMapper(database) }
+        YouTubeMatchDialog(
+            currentYouTubeId = resolvedSpotifyMatch?.youtubeId,
+            onConfirm = { result ->
+                val sid = resolvedSpotifyMatch?.spotifyId ?: return@YouTubeMatchDialog
+                coroutineScope.launch(Dispatchers.IO) {
+                    mapper.overrideMatch(
+                        spotifyId = sid,
+                        youtubeId = result.videoId,
+                        title = result.title,
+                        artist = result.artist,
+                    )
+                    // Swap playback to the new version if currently playing the overridden track
+                    if (mediaMetadata.id == resolvedSpotifyMatch?.youtubeId &&
+                        result.videoId != mediaMetadata.id
+                    ) {
+                        val songItems = YouTube.queue(listOf(result.videoId)).getOrNull()
+                        val songItem = songItems?.firstOrNull()
+                        if (songItem != null) {
+                            kotlinx.coroutines.withContext(Dispatchers.Main) {
+                                playerConnection.playNext(songItem.toMediaItem())
+                                playerConnection.seekToNext()
+                            }
+                        }
+                    }
+                }
+            },
+            onDismiss = { showYouTubeMatchDialog = false },
+        )
     }
 
     val listenTogetherManager = LocalListenTogetherManager.current
@@ -586,6 +635,25 @@ fun PlayerMenu(
         item {
             Material3MenuGroup(
                 items = buildList {
+                    if (resolvedSpotifyMatch != null) {
+                        add(
+                            Material3MenuItemData(
+                                title = { Text(text = stringResource(R.string.change_youtube_version)) },
+                                description = { Text(text = stringResource(R.string.change_youtube_version_desc)) },
+                                icon = {
+                                    Icon(
+                                        painter = painterResource(R.drawable.link),
+                                        contentDescription = null,
+                                        modifier = Modifier.size(24.dp)
+                                    )
+                                },
+                                onClick = {
+                                    showYouTubeMatchDialog = true
+                                }
+                            )
+                        )
+                    }
+
                     add(
                         Material3MenuItemData(
                             title = { Text(text = stringResource(R.string.details)) },

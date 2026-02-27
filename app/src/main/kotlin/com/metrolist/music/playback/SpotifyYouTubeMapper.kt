@@ -31,14 +31,12 @@ class SpotifyYouTubeMapper(
      * Returns null if no suitable match is found.
      */
     suspend fun mapToYouTube(track: SpotifyTrack): MediaMetadata? = withContext(Dispatchers.IO) {
-        // Check cache first
         val cached = database.getSpotifyMatch(track.id)
         if (cached != null) {
-            Timber.d("Spotify match cache hit: ${track.name} -> ${cached.youtubeId}")
+            Timber.d("Spotify match cache hit: ${track.name} -> ${cached.youtubeId} (manual=${cached.isManualOverride})")
             return@withContext buildMediaMetadata(cached.youtubeId, track, cached.title, cached.artist)
         }
 
-        // Search YouTube Music
         val query = SpotifyMapper.buildSearchQuery(track)
         Timber.d("Searching YouTube for Spotify track: $query")
 
@@ -46,7 +44,6 @@ class SpotifyYouTubeMapper(
         val bestMatch = findBestMatch(track, searchResult)
 
         if (bestMatch != null) {
-            // Cache the match
             database.upsertSpotifyMatch(
                 SpotifyMatchEntity(
                     spotifyId = track.id,
@@ -68,6 +65,29 @@ class SpotifyYouTubeMapper(
 
         Timber.w("No YouTube match found for Spotify track: ${track.name} by ${track.artists.firstOrNull()?.name}")
         null
+    }
+
+    /**
+     * Persists a user-chosen YouTube match for a Spotify track.
+     * Manual overrides are never replaced by the automatic fuzzy matcher.
+     */
+    suspend fun overrideMatch(
+        spotifyId: String,
+        youtubeId: String,
+        title: String,
+        artist: String,
+    ) = withContext(Dispatchers.IO) {
+        database.upsertSpotifyMatch(
+            SpotifyMatchEntity(
+                spotifyId = spotifyId,
+                youtubeId = youtubeId,
+                title = title,
+                artist = artist,
+                matchScore = 1.0,
+                isManualOverride = true,
+            )
+        )
+        Timber.d("Manual override saved: $spotifyId -> $youtubeId ($title by $artist)")
     }
 
     /**

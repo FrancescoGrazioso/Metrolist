@@ -2,11 +2,11 @@
   "formatVersion": 1,
   "database": {
     "version": 34,
-    "identityHash": "8e486373672922fea7afc4aa634c077b",
+    "identityHash": "9bf8d65ce163b6375b0a095f89f84b71",
     "entities": [
       {
         "tableName": "song",
-        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` TEXT NOT NULL, `title` TEXT NOT NULL, `duration` INTEGER NOT NULL, `thumbnailUrl` TEXT, `albumId` TEXT, `albumName` TEXT, `explicit` INTEGER NOT NULL DEFAULT 0, `year` INTEGER, `date` INTEGER, `dateModified` INTEGER, `liked` INTEGER NOT NULL, `likedDate` INTEGER, `totalPlayTime` INTEGER NOT NULL, `inLibrary` INTEGER, `dateDownload` INTEGER, `isLocal` INTEGER NOT NULL DEFAULT false, `libraryAddToken` TEXT, `libraryRemoveToken` TEXT, `lyricsOffset` INTEGER NOT NULL DEFAULT 0, `romanizeLyrics` INTEGER NOT NULL DEFAULT true, `isDownloaded` INTEGER NOT NULL DEFAULT 0, `isUploaded` INTEGER NOT NULL DEFAULT false, `isVideo` INTEGER NOT NULL DEFAULT false, `isEpisode` INTEGER NOT NULL DEFAULT false, PRIMARY KEY(`id`))",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` TEXT NOT NULL, `title` TEXT NOT NULL, `duration` INTEGER NOT NULL, `thumbnailUrl` TEXT, `albumId` TEXT, `albumName` TEXT, `explicit` INTEGER NOT NULL DEFAULT 0, `year` INTEGER, `date` INTEGER, `dateModified` INTEGER, `liked` INTEGER NOT NULL, `likedDate` INTEGER, `totalPlayTime` INTEGER NOT NULL, `inLibrary` INTEGER, `dateDownload` INTEGER, `isLocal` INTEGER NOT NULL DEFAULT false, `libraryAddToken` TEXT, `libraryRemoveToken` TEXT, `lyricsOffset` INTEGER NOT NULL DEFAULT 0, `romanizeLyrics` INTEGER NOT NULL DEFAULT true, `isDownloaded` INTEGER NOT NULL DEFAULT 0, `isUploaded` INTEGER NOT NULL DEFAULT false, `isVideo` INTEGER NOT NULL DEFAULT false, PRIMARY KEY(`id`))",
         "fields": [
           {
             "fieldPath": "id",
@@ -138,13 +138,6 @@
           {
             "fieldPath": "isVideo",
             "columnName": "isVideo",
-            "affinity": "INTEGER",
-            "notNull": true,
-            "defaultValue": "false"
-          },
-          {
-            "fieldPath": "isEpisode",
-            "columnName": "isEpisode",
             "affinity": "INTEGER",
             "notNull": true,
             "defaultValue": "false"
@@ -1240,12 +1233,18 @@
         }
       },
       {
-        "tableName": "podcast",
-        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` TEXT NOT NULL, `title` TEXT NOT NULL, `author` TEXT, `thumbnailUrl` TEXT, `channelId` TEXT, `bookmarkedAt` INTEGER, `lastUpdateTime` INTEGER NOT NULL, `libraryAddToken` TEXT, `libraryRemoveToken` TEXT, PRIMARY KEY(`id`))",
+        "tableName": "spotify_match",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`spotifyId` TEXT NOT NULL, `youtubeId` TEXT NOT NULL, `title` TEXT NOT NULL, `artist` TEXT NOT NULL, `matchScore` REAL NOT NULL, `cachedAt` INTEGER NOT NULL, `isManualOverride` INTEGER NOT NULL DEFAULT 0, PRIMARY KEY(`spotifyId`))",
         "fields": [
           {
-            "fieldPath": "id",
-            "columnName": "id",
+            "fieldPath": "spotifyId",
+            "columnName": "spotifyId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "youtubeId",
+            "columnName": "youtubeId",
             "affinity": "TEXT",
             "notNull": true
           },
@@ -1256,46 +1255,35 @@
             "notNull": true
           },
           {
-            "fieldPath": "author",
-            "columnName": "author",
-            "affinity": "TEXT"
+            "fieldPath": "artist",
+            "columnName": "artist",
+            "affinity": "TEXT",
+            "notNull": true
           },
           {
-            "fieldPath": "thumbnailUrl",
-            "columnName": "thumbnailUrl",
-            "affinity": "TEXT"
+            "fieldPath": "matchScore",
+            "columnName": "matchScore",
+            "affinity": "REAL",
+            "notNull": true
           },
           {
-            "fieldPath": "channelId",
-            "columnName": "channelId",
-            "affinity": "TEXT"
-          },
-          {
-            "fieldPath": "bookmarkedAt",
-            "columnName": "bookmarkedAt",
-            "affinity": "INTEGER"
-          },
-          {
-            "fieldPath": "lastUpdateTime",
-            "columnName": "lastUpdateTime",
+            "fieldPath": "cachedAt",
+            "columnName": "cachedAt",
             "affinity": "INTEGER",
             "notNull": true
           },
           {
-            "fieldPath": "libraryAddToken",
-            "columnName": "libraryAddToken",
-            "affinity": "TEXT"
-          },
-          {
-            "fieldPath": "libraryRemoveToken",
-            "columnName": "libraryRemoveToken",
-            "affinity": "TEXT"
+            "fieldPath": "isManualOverride",
+            "columnName": "isManualOverride",
+            "affinity": "INTEGER",
+            "notNull": true,
+            "defaultValue": "0"
           }
         ],
         "primaryKey": {
           "autoGenerate": false,
           "columnNames": [
-            "id"
+            "spotifyId"
           ]
         }
       }
@@ -1316,7 +1304,7 @@
     ],
     "setupQueries": [
       "CREATE TABLE IF NOT EXISTS room_master_table (id INTEGER PRIMARY KEY,identity_hash TEXT)",
-      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, '8e486373672922fea7afc4aa634c077b')"
+      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, '9bf8d65ce163b6375b0a095f89f84b71')"
     ]
   }
 }

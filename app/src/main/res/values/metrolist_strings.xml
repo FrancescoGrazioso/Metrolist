@@ -418,6 +418,15 @@
     <string name="download_desc">Make available for offline playback</string>
     <string name="add_to_playlist_desc">Add to one of your playlists</string>
     <string name="refetch_desc">Fetch the latest metadata from YouTube Music</string>
+    <string name="change_youtube_version">Change YouTube version</string>
+    <string name="change_youtube_version_desc">Pick a different YouTube match for this Spotify track</string>
+    <string name="select_youtube_match">Select the correct version</string>
+    <string name="current_match">Current match</string>
+    <string name="new_match">New match</string>
+    <string name="paste_youtube_url">Paste here the new YouTube URL</string>
+    <string name="video_not_found">Video not found</string>
+    <string name="fetch_video_error">Failed to fetch video info</string>
+    <string name="searching">Searching…</string>
     <string name="share_desc">Share a link to this item</string>
     <string name="delete_desc">Permanently remove this item</string>
     <string name="advanced_desc">Change the song\'s tempo and pitch</string>

@@ -1690,6 +1690,9 @@ interface DatabaseDao {
     @Query("SELECT * FROM spotify_match WHERE spotifyId = :spotifyId LIMIT 1")
     fun getSpotifyMatch(spotifyId: String): SpotifyMatchEntity?
 
+    @Query("SELECT * FROM spotify_match WHERE youtubeId = :youtubeId LIMIT 1")
+    fun getSpotifyMatchByYouTubeId(youtubeId: String): SpotifyMatchEntity?
+
     @Upsert
     fun upsertSpotifyMatch(match: SpotifyMatchEntity)
 
@@ -1698,4 +1701,7 @@ interface DatabaseDao {
 
     @Query("DELETE FROM spotify_match")
     fun clearAllSpotifyMatches()
+
+    @Query("DELETE FROM spotify_match WHERE spotifyId = :spotifyId")
+    fun deleteSpotifyMatch(spotifyId: String)
 }

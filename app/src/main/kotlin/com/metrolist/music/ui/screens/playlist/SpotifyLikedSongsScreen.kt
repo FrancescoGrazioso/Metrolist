@@ -7,6 +7,7 @@ package com.metrolist.music.ui.screens.playlist
 
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -31,6 +32,11 @@ import androidx.compose.material3.TopAppBarScrollBehavior
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.produceState
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.painterResource
@@ -48,11 +54,17 @@ import com.metrolist.music.playback.queues.SpotifyLikedSongsQueue
 import com.metrolist.music.ui.component.IconButton
 import com.metrolist.music.ui.component.ItemThumbnail
 import com.metrolist.music.ui.component.ListItem
+import com.metrolist.music.ui.component.YouTubeMatchDialog
 import com.metrolist.music.ui.utils.backToMain
 import com.metrolist.music.utils.joinByBullet
 import com.metrolist.music.utils.makeTimeString
+import com.metrolist.music.LocalDatabase
+import com.metrolist.music.playback.SpotifyYouTubeMapper
 import com.metrolist.music.viewmodels.SpotifyLikedSongsViewModel
 import com.metrolist.spotify.SpotifyMapper
+import com.metrolist.spotify.models.SpotifyTrack
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
@@ -62,6 +74,8 @@ fun SpotifyLikedSongsScreen(
     viewModel: SpotifyLikedSongsViewModel = hiltViewModel(),
 ) {
     val playerConnection = LocalPlayerConnection.current ?: return
+    val database = LocalDatabase.current
+    val coroutineScope = rememberCoroutineScope()
 
     val tracks by viewModel.tracks.collectAsState()
     val total by viewModel.total.collectAsState()
@@ -69,6 +83,34 @@ fun SpotifyLikedSongsScreen(
     val error by viewModel.error.collectAsState()
 
     val lazyListState = rememberLazyListState()
+
+    var overrideTarget by remember { mutableStateOf<SpotifyTrack?>(null) }
+    val mapper = remember { SpotifyYouTubeMapper(database) }
+
+    overrideTarget?.let { track ->
+        val currentMatch by produceState<com.metrolist.music.db.entities.SpotifyMatchEntity?>(
+            initialValue = null,
+            track.id,
+        ) {
+            kotlinx.coroutines.withContext(Dispatchers.IO) {
+                value = database.getSpotifyMatch(track.id)
+            }
+        }
+        YouTubeMatchDialog(
+            currentYouTubeId = currentMatch?.youtubeId,
+            onConfirm = { result ->
+                coroutineScope.launch(Dispatchers.IO) {
+                    mapper.overrideMatch(
+                        spotifyId = track.id,
+                        youtubeId = result.videoId,
+                        title = result.title,
+                        artist = result.artist,
+                    )
+                }
+            },
+            onDismiss = { overrideTarget = null },
+        )
+    }
 
     Box(modifier = Modifier.fillMaxSize()) {
         LazyColumn(
@@ -194,14 +236,19 @@ fun SpotifyLikedSongsScreen(
                     },
                     modifier = Modifier
                         .fillMaxWidth()
-                        .clickable {
-                            playerConnection.playQueue(
-                                SpotifyLikedSongsQueue(
-                                    startIndex = index,
-                                    mapper = viewModel.mapper,
+                        .combinedClickable(
+                            onClick = {
+                                playerConnection.playQueue(
+                                    SpotifyLikedSongsQueue(
+                                        startIndex = index,
+                                        mapper = viewModel.mapper,
+                                    )
                                 )
-                            )
-                        }
+                            },
+                            onLongClick = {
+                                overrideTarget = track
+                            },
+                        )
                         .animateItem(),
                 )
             }

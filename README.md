@@ -32,6 +32,7 @@ The name "Meld" reflects the core idea: **melding** two music platforms into a s
 - **Smart queue generation** — Custom recommendation engine that builds radio-like queues from your Spotify taste profile (top tracks/artists across 3 time ranges, genre similarity, popularity matching)
 - **Spotify library sync** — Access your Spotify playlists and liked songs directly in the app
 - **Spotify-to-YouTube matching** — Fuzzy matching algorithm with local caching for fast, accurate track resolution
+- **Manual match override** — If a Spotify track is matched to the wrong YouTube video, you can manually fix it by pasting the correct YouTube link. The override is saved permanently and takes priority over automatic matching
 - **Spotify album browsing** — Dedicated album screen for Spotify albums with full tracklist, metadata, and one-tap playback
 - **Hybrid profile cache** — 3-tier data strategy (GraphQL → REST API → local DB) with persistent caching for instant home screen loading on app restart, automatic rate-limit handling, and parallel artist image enrichment
 - **Artist navigation** — Tap any Spotify artist on the home screen to navigate directly to their YouTube Music artist page
@@ -90,7 +91,7 @@ Meld connects to your Spotify account through a built-in WebView login — no de
    - Mixing in tracks from your personal top tracks pool
    - Scoring candidates by artist affinity (30%), genre overlap (20%), source relevance (25%), recency (15%), and popularity similarity (10%)
    - Diversifying the queue to avoid repetition (max 3 tracks per artist)
-7. **Playback** — Each Spotify track is matched to its YouTube Music equivalent using fuzzy title/artist/duration matching, then streamed via YouTube Music's infrastructure. Matched results are cached locally for instant resolution on subsequent plays.
+7. **Playback** — Each Spotify track is matched to its YouTube Music equivalent using fuzzy title/artist/duration matching, then streamed via YouTube Music's infrastructure. Matched results are cached locally for instant resolution on subsequent plays. If a match is wrong, you can manually override it from the player's three-dot menu → "Change YouTube version" by pasting the correct YouTube link.
 
 ## Setup
 
@@ -160,6 +161,20 @@ If the track still doesn't play after logging in, it may be restricted in your c
 ### Q: Why do some songs not match correctly?
 
 The Spotify-to-YouTube matching uses fuzzy matching on title, artist name, and duration. In rare cases (live versions, remasters, regional variants), the match may not be perfect. Matched results are cached locally so they're resolved instantly on subsequent plays.
+
+**You can manually fix an incorrect match.** The recommended way is through the player menu:
+
+1. Play the song that has the wrong match
+2. Tap the **three-dot menu (⋮)** at the bottom-right of the Now Playing screen
+3. Tap **"Change YouTube version"** (this option only appears for Spotify-sourced tracks)
+4. You'll see the current match with its thumbnail, title, and YouTube link at the top
+5. Paste the correct YouTube or YouTube Music link in the input field below
+6. A preview of the new match will appear — verify it's the right one and tap **OK**
+7. The player will automatically switch to the new version
+
+The override is saved permanently in your local database and will always be used for that Spotify track, even if the automatic matching would suggest a different result.
+
+You can also access "Change YouTube version" from the three-dot context menu of any song in your library, queue, or album view — as long as that song was originally resolved from a Spotify track. Additionally, long-pressing a track in a Spotify playlist or Liked Songs screen in the Library section opens the override dialog directly.
 
 ### Q: Can my Spotify or YouTube account get banned?
 

@@ -95,6 +95,7 @@ import com.metrolist.music.ui.component.NewAction
 import com.metrolist.music.ui.component.NewActionGrid
 import com.metrolist.music.ui.component.SongListItem
 import com.metrolist.music.ui.component.TextFieldDialog
+import com.metrolist.music.ui.component.YouTubeMatchDialog
 import com.metrolist.music.ui.utils.ShowMediaInfo
 import com.metrolist.music.viewmodels.CachePlaylistViewModel
 import kotlinx.coroutines.Dispatchers
@@ -110,6 +111,7 @@ fun SongMenu(
     playlistBrowseId: String? = null,
     onDismiss: () -> Unit,
     isFromCache: Boolean = false,
+    spotifyId: String? = null,
 ) {
     val context = LocalContext.current
     val database = LocalDatabase.current
@@ -157,6 +159,23 @@ fun SongMenu(
         mutableStateOf(false)
     }
 
+    var showYouTubeMatchDialog by rememberSaveable { mutableStateOf(false) }
+
+    // Resolve the Spotify match — either explicitly supplied or looked up via the YouTube ID
+    val resolvedSpotifyMatch by produceState<com.metrolist.music.db.entities.SpotifyMatchEntity?>(
+        initialValue = null,
+        song.id,
+        spotifyId,
+    ) {
+        withContext(Dispatchers.IO) {
+            value = if (spotifyId != null) {
+                database.getSpotifyMatch(spotifyId)
+            } else {
+                database.getSpotifyMatchByYouTubeId(song.id)
+            }
+        }
+    }
+
     val TextFieldValueSaver: Saver<TextFieldValue, *> = Saver(
         save = { it.text },
         restore = { text -> TextFieldValue(text, TextRange(text.length)) }
@@ -168,6 +187,25 @@ fun SongMenu(
 
     var artistField by rememberSaveable(stateSaver = TextFieldValueSaver) {
         mutableStateOf(TextFieldValue(song.artists.firstOrNull()?.name.orEmpty()))
+    }
+
+    if (showYouTubeMatchDialog) {
+        val mapper = remember { com.metrolist.music.playback.SpotifyYouTubeMapper(database) }
+        YouTubeMatchDialog(
+            currentYouTubeId = resolvedSpotifyMatch?.youtubeId,
+            onConfirm = { result ->
+                val sid = resolvedSpotifyMatch?.spotifyId ?: spotifyId ?: return@YouTubeMatchDialog
+                coroutineScope.launch(Dispatchers.IO) {
+                    mapper.overrideMatch(
+                        spotifyId = sid,
+                        youtubeId = result.videoId,
+                        title = result.title,
+                        artist = result.artist,
+                    )
+                }
+            },
+            onDismiss = { showYouTubeMatchDialog = false },
+        )
     }
 
     if (showEditDialog) {
@@ -961,6 +999,23 @@ fun SongMenu(
                             }
                         )
                     )
+                    if (resolvedSpotifyMatch != null) {
+                        add(
+                            Material3MenuItemData(
+                                title = { Text(text = stringResource(R.string.change_youtube_version)) },
+                                description = { Text(text = stringResource(R.string.change_youtube_version_desc)) },
+                                icon = {
+                                    Icon(
+                                        painter = painterResource(R.drawable.link),
+                                        contentDescription = null,
+                                    )
+                                },
+                                onClick = {
+                                    showYouTubeMatchDialog = true
+                                }
+                            )
+                        )
+                    }
                     add(
                         Material3MenuItemData(
                             title = { Text(text = stringResource(R.string.details)) },
