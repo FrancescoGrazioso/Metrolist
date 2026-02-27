@@ -5,19 +5,21 @@
 
 package com.metrolist.music.utils
 
+import androidx.media3.common.C
 import com.metrolist.lastfm.LastFM
 import com.metrolist.music.models.MediaMetadata
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import timber.log.Timber
 import kotlin.math.min
 
 class ScrobbleManager(
     private val scope: CoroutineScope,
-    var minSongDuration: Int = 30,
-    var scrobbleDelayPercent: Float = 0.5f,
-    var scrobbleDelaySeconds: Int = 50
+    var minSongDuration: Int = LastFM.DEFAULT_SCROBBLE_MIN_SONG_DURATION,
+    var scrobbleDelayPercent: Float = LastFM.DEFAULT_SCROBBLE_DELAY_PERCENT,
+    var scrobbleDelaySeconds: Int = LastFM.DEFAULT_SCROBBLE_DELAY_SECONDS,
 ) {
     private var scrobbleJob: Job? = null
     private var scrobbleRemainingMillis: Long = 0L
@@ -59,7 +61,10 @@ class ScrobbleManager(
 
     private fun startScrobbleTimer(metadata: MediaMetadata, duration: Long? = null) {
         scrobbleJob?.cancel()
-        val duration = duration?.toInt()?.div(1000) ?: metadata.duration
+        val duration = when {
+            duration == null || duration == C.TIME_UNSET || duration <= 0 -> metadata.duration
+            else -> (duration / 1000).toInt()
+        }
 
         if (duration <= minSongDuration) return
 
@@ -108,13 +113,18 @@ class ScrobbleManager(
 
     private fun scrobbleSong(metadata: MediaMetadata) {
         scope.launch {
+            val artist = metadata.artists.joinToString { it.name }
             LastFM.scrobble(
-                artist = metadata.artists.joinToString { it.name },
+                artist = artist,
                 track = metadata.title,
                 duration = metadata.duration,
                 timestamp = songStartedAt,
                 album = metadata.album?.title,
-            )
+            ).onSuccess {
+                Timber.d("Last.fm: scrobbled \"${metadata.title}\" by $artist")
+            }.onFailure { e ->
+                Timber.w(e, "Last.fm: scrobble failed for \"${metadata.title}\" by $artist")
+            }
         }
     }
 
@@ -124,8 +134,10 @@ class ScrobbleManager(
                 artist = metadata.artists.joinToString { it.name },
                 track = metadata.title,
                 album = metadata.album?.title,
-                duration = metadata.duration
-            )
+                duration = metadata.duration,
+            ).onFailure { e ->
+                Timber.w(e, "Last.fm: updateNowPlaying failed for \"${metadata.title}\"")
+            }
         }
     }
 
