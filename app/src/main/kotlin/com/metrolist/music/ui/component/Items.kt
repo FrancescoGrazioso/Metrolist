@@ -76,6 +76,7 @@ import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.compose.ui.util.fastForEachIndexed
 import androidx.compose.ui.zIndex
 import androidx.media3.common.MediaItem
@@ -92,11 +93,15 @@ import com.metrolist.innertube.models.EpisodeItem
 import com.metrolist.innertube.models.PlaylistItem
 import com.metrolist.innertube.models.PodcastItem
 import com.metrolist.innertube.models.SongItem
+import com.metrolist.innertube.models.WatchEndpoint.WatchEndpointMusicSupportedConfigs.WatchEndpointMusicConfig.Companion.MUSIC_VIDEO_TYPE_ATV
+import com.metrolist.innertube.models.WatchEndpoint.WatchEndpointMusicSupportedConfigs.WatchEndpointMusicConfig.Companion.MUSIC_VIDEO_TYPE_OMV
+import com.metrolist.innertube.models.WatchEndpoint.WatchEndpointMusicSupportedConfigs.WatchEndpointMusicConfig.Companion.MUSIC_VIDEO_TYPE_UGC
 import com.metrolist.innertube.models.YTItem
 import com.metrolist.music.LocalDatabase
 import com.metrolist.music.LocalDownloadUtil
 import com.metrolist.music.LocalPlayerConnection
 import com.metrolist.music.R
+import com.metrolist.music.constants.ShowVideoTypeBadgesKey
 import com.metrolist.music.constants.CropAlbumArtKey
 import com.metrolist.music.constants.GridItemSize
 import com.metrolist.music.constants.GridItemsSizeKey
@@ -1003,6 +1008,7 @@ fun YouTubeListItem(
         //     Icon.Library()
         // }
         if (item is SongItem) {
+            Icon.VideoTypeBadge(item.musicVideoType)
             val download by LocalDownloadUtil.current.getDownload(item.id).collectAsState(null)
             Icon.Download(download?.state)
         }
@@ -1073,6 +1079,7 @@ fun YouTubeGridItem(
         if (item.explicit) Icon.Explicit()
         // if (item is SongItem && song?.song?.inLibrary != null) Icon.Library()
         if (item is SongItem) {
+            Icon.VideoTypeBadge(item.musicVideoType)
             val download by LocalDownloadUtil.current.getDownload(item.id).collectAsState(null)
             Icon.Download(download?.state)
         }
@@ -1750,6 +1757,31 @@ object Icon {
             modifier = Modifier
                 .size(18.dp)
                 .padding(end = 2.dp)
+        )
+    }
+
+    @Composable
+    fun VideoTypeBadge(musicVideoType: String?) {
+        val showBadges by rememberPreference(ShowVideoTypeBadgesKey, defaultValue = true)
+        if (!showBadges) return
+        val (label, color) = when (musicVideoType) {
+            MUSIC_VIDEO_TYPE_ATV -> "ATV" to Color(0xFF4CAF50)
+            MUSIC_VIDEO_TYPE_OMV -> "OMV" to Color(0xFF2196F3)
+            MUSIC_VIDEO_TYPE_UGC -> "UGC" to Color(0xFFFF9800)
+            else -> return
+        }
+        Text(
+            text = label,
+            color = Color.White,
+            fontSize = 9.sp,
+            fontWeight = FontWeight.Bold,
+            modifier = Modifier
+                .padding(end = 4.dp)
+                .background(
+                    color = color,
+                    shape = RoundedCornerShape(4.dp)
+                )
+                .padding(horizontal = 4.dp, vertical = 1.dp)
         )
     }
 }

@@ -48,7 +48,7 @@ constructor(
         private const val STAGGER_DELAY_MS = 500L
     }
 
-    val spotifyYouTubeMapper = SpotifyYouTubeMapper(database)
+    val spotifyYouTubeMapper = SpotifyYouTubeMapper(database, context.dataStore)
 
     // =========================================================================
     // State: Spotify active flag

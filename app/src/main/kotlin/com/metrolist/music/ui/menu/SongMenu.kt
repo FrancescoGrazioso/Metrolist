@@ -86,7 +86,9 @@ import timber.log.Timber
 import com.metrolist.music.extensions.toMediaItem
 import com.metrolist.music.models.toMediaMetadata
 import com.metrolist.music.playback.ExoDownloadService
+import com.metrolist.music.playback.SpotifyYouTubeMapper
 import com.metrolist.music.playback.queues.YouTubeQueue
+import com.metrolist.music.utils.dataStore
 import com.metrolist.music.ui.component.ListDialog
 import com.metrolist.music.ui.component.LocalBottomSheetPageState
 import com.metrolist.music.ui.component.Material3MenuGroup
@@ -190,7 +192,7 @@ fun SongMenu(
     }
 
     if (showYouTubeMatchDialog) {
-        val mapper = remember { com.metrolist.music.playback.SpotifyYouTubeMapper(database) }
+        val mapper = remember { SpotifyYouTubeMapper(database, context.dataStore) }
         YouTubeMatchDialog(
             currentYouTubeId = resolvedSpotifyMatch?.youtubeId,
             onConfirm = { result ->

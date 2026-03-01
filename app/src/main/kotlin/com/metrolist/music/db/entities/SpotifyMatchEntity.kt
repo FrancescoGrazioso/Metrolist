@@ -25,4 +25,6 @@ data class SpotifyMatchEntity(
     val cachedAt: Long = System.currentTimeMillis(),
     @ColumnInfo(defaultValue = "0")
     val isManualOverride: Boolean = false,
+    @ColumnInfo(defaultValue = "NULL")
+    val musicVideoType: String? = null,
 )

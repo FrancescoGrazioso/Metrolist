@@ -401,6 +401,14 @@
     <string name="spotify_use_for_home_description">Home screen will show personalized content from Spotify</string>
     <string name="spotify_home_only">Spotify-only home</string>
     <string name="spotify_home_only_description">Show only Spotify content on the home screen. When disabled, local content like Speed Dial and Quick Picks will also appear.</string>
+    <string name="hide_ugc_songs">Hide user uploads (UGC)</string>
+    <string name="hide_ugc_songs_description">Hide user-generated content like live recordings and fan uploads</string>
+    <string name="hide_omv_songs">Hide music videos (OMV)</string>
+    <string name="hide_omv_songs_description">Hide official music videos from artists</string>
+    <string name="hide_atv_songs">Hide audio tracks (ATV)</string>
+    <string name="hide_atv_songs_description">Hide official studio audio tracks (not recommended)</string>
+    <string name="show_video_type_badges">Show video type badges</string>
+    <string name="show_video_type_badges_description">Show ATV/OMV/UGC badges on songs</string>
     <string name="spotify_top_tracks">Your Top Tracks</string>
     <string name="spotify_top_artists">Your Top Artists</string>
     <string name="spotify_made_for_you">All-Time Favorites</string>

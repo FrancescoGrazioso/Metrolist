@@ -14,6 +14,7 @@ import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.metrolist.innertube.YouTube
+import com.metrolist.innertube.models.SongItem
 import com.metrolist.innertube.models.YTItem
 import com.metrolist.innertube.models.filterExplicit
 import com.metrolist.innertube.models.filterVideoSongs
@@ -35,6 +36,7 @@ import com.metrolist.music.utils.toAlbumItem
 import com.metrolist.music.utils.toArtistItem
 import com.metrolist.music.utils.toPlaylistItem
 import com.metrolist.music.utils.toSongItem
+import com.metrolist.music.utils.toSpotifyTrackStub
 import com.metrolist.music.db.MusicDatabase
 import com.metrolist.music.playback.SpotifyYouTubeMapper
 import com.metrolist.spotify.Spotify
@@ -43,6 +45,7 @@ import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import timber.log.Timber
 import java.net.URLDecoder
@@ -57,7 +60,7 @@ constructor(
     database: MusicDatabase,
 ) : ViewModel() {
 
-    val spotifyYouTubeMapper = SpotifyYouTubeMapper(database)
+    val spotifyYouTubeMapper = SpotifyYouTubeMapper(database, context.dataStore)
     val query = try {
         URLDecoder.decode(savedStateHandle.get<String>("query")!!, "UTF-8")
     } catch (e: IllegalArgumentException) {
@@ -78,6 +81,12 @@ constructor(
      * null = show all types (summary mode)
      */
     val spotifyFilter = MutableStateFlow<String?>(null)
+
+    /**
+     * Resolved YouTube video types for Spotify search results.
+     * Maps Spotify item ID (e.g. "spotify:abc") to the matched YouTube musicVideoType.
+     */
+    val resolvedVideoTypes = MutableStateFlow<Map<String, String?>>(emptyMap())
 
 
     init {
@@ -219,6 +228,28 @@ constructor(
             }
 
         summaryPage = SearchSummaryPage(summaries = summaries)
+
+        // Resolve video types in the background for Spotify track results
+        val songItems = summaries
+            .flatMap { it.items }
+            .filterIsInstance<SongItem>()
+        resolveSpotifyVideoTypes(songItems)
+    }
+
+    private fun resolveSpotifyVideoTypes(items: List<SongItem>) {
+        for (item in items) {
+            val spotifyTrack = item.toSpotifyTrackStub() ?: continue
+            viewModelScope.launch(Dispatchers.IO) {
+                try {
+                    val metadata = spotifyYouTubeMapper.mapToYouTube(spotifyTrack)
+                    resolvedVideoTypes.update { map ->
+                        map + (item.id to metadata?.musicVideoType)
+                    }
+                } catch (e: Exception) {
+                    Timber.w(e, "Failed to resolve video type for ${item.title}")
+                }
+            }
+        }
     }
 
     private suspend fun loadSpotifyFiltered(filterType: String) {

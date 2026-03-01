@@ -94,6 +94,8 @@ import com.metrolist.music.ui.component.EmptyPlaceholder
 import com.metrolist.music.ui.component.LocalMenuState
 import com.metrolist.music.ui.component.NavigationTitle
 import com.metrolist.music.ui.component.YouTubeListItem
+import com.metrolist.music.ui.component.Icon as MIcon
+import com.metrolist.music.LocalDownloadUtil
 import com.metrolist.music.ui.component.shimmer.ListItemPlaceHolder
 import com.metrolist.music.ui.component.shimmer.ShimmerHost
 import com.metrolist.music.ui.menu.YouTubeAlbumMenu
@@ -107,6 +109,7 @@ import com.metrolist.music.utils.toSpotifyTrackStub
 import com.metrolist.music.viewmodels.OnlineSearchViewModel
 import com.metrolist.innertube.YouTube
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.launch
 import java.net.URLDecoder
 import java.net.URLEncoder
@@ -132,6 +135,7 @@ fun OnlineSearchResult(
 
     var isSearchFocused by remember { mutableStateOf(false) }
     val isSpotifySearch by viewModel.isSpotifySearch.collectAsState()
+    val resolvedVideoTypes by viewModel.resolvedVideoTypes.collectAsState()
 
     val pauseSearchHistory by rememberPreference(PauseSearchHistoryKey, defaultValue = false)
 
@@ -257,6 +261,9 @@ fun OnlineSearchResult(
                 }
             }
         }
+        val resolvedType = if (item is SongItem && item.id.isSpotifyId()) {
+            resolvedVideoTypes[item.id]
+        } else null
         YouTubeListItem(
             item = item,
             isActive =
@@ -267,6 +274,27 @@ fun OnlineSearchResult(
                 else -> false
             },
             isPlaying = isPlaying,
+            badges = {
+                val database = LocalDatabase.current
+                val song by androidx.compose.runtime.produceState<com.metrolist.music.db.entities.Song?>(initialValue = null, item.id) {
+                    if (item is SongItem) value = database.song(item.id).firstOrNull()
+                }
+                val album by androidx.compose.runtime.produceState<com.metrolist.music.db.entities.Album?>(initialValue = null, item.id) {
+                    if (item is AlbumItem) value = database.album(item.id).firstOrNull()
+                }
+                if ((item is SongItem && song?.song?.liked == true) ||
+                    (item is AlbumItem && album?.album?.bookmarkedAt != null)
+                ) {
+                    MIcon.Favorite()
+                }
+                if (item.explicit) MIcon.Explicit()
+                if (item is SongItem) {
+                    // Show resolved video type for Spotify items, or native type for YouTube items
+                    MIcon.VideoTypeBadge(resolvedType ?: item.musicVideoType)
+                    val download by LocalDownloadUtil.current.getDownload(item.id).collectAsState(null)
+                    MIcon.Download(download?.state)
+                }
+            },
             trailingContent = {
                 IconButton(
                     onClick = longClick,

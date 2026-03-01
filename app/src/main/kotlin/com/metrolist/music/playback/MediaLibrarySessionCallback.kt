@@ -80,7 +80,7 @@ constructor(
     var toggleStartRadio: () -> Unit = {}
     var toggleLibrary: () -> Unit = {}
 
-    private val spotifyMapper by lazy { SpotifyYouTubeMapper(database) }
+    private val spotifyMapper by lazy { SpotifyYouTubeMapper(database, context.dataStore) }
 
     companion object {
         private const val TAG = "MediaLibraryCallback"
