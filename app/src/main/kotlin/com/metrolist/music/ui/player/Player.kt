@@ -834,6 +834,7 @@ fun BottomSheetPlayer(
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
                         if (mediaMetadata.explicit) MIcon.Explicit()
+                        MIcon.VideoTypeBadge(mediaMetadata.musicVideoType)
 
                         if (mediaMetadata.artists.any { it.name.isNotBlank() }) {
                             val annotatedString = buildAnnotatedString {

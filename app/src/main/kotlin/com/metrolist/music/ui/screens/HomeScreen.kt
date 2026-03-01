@@ -173,6 +173,7 @@ import com.metrolist.music.ui.menu.YouTubeArtistMenu
 import com.metrolist.music.ui.menu.YouTubePlaylistMenu
 import com.metrolist.music.ui.menu.YouTubeSongMenu
 import com.metrolist.music.ui.utils.SnapLayoutInfoProvider
+import com.metrolist.music.utils.dataStore
 import com.metrolist.music.utils.rememberEnumPreference
 import com.metrolist.music.utils.rememberPreference
 import com.metrolist.music.viewmodels.CommunityPlaylistItem
@@ -603,7 +604,8 @@ fun HomeScreen(
     val spotifyHomeSections by viewModel.spotifyHomeSections.collectAsState()
     val isSpotifyHome by viewModel.useSpotifyHome.collectAsState()
     val isSpotifyHomeOnly by viewModel.spotifyHomeOnly.collectAsState()
-    val spotifyMapper = remember { SpotifyYouTubeMapper(database) }
+    val context = LocalContext.current
+    val spotifyMapper = remember { SpotifyYouTubeMapper(database, context.dataStore) }
 
     val isLoading: Boolean by viewModel.isLoading.collectAsState()
     val isMoodAndGenresLoading = isLoading && explorePage?.moodAndGenres == null

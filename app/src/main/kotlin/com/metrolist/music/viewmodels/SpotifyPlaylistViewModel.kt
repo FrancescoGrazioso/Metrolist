@@ -7,6 +7,7 @@ package com.metrolist.music.viewmodels
 
 import android.content.Context
 import androidx.lifecycle.SavedStateHandle
+import com.metrolist.music.utils.dataStore
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.metrolist.music.db.MusicDatabase
@@ -33,7 +34,7 @@ constructor(
 ) : ViewModel() {
     val playlistId: String = savedStateHandle.get<String>("playlistId")
         ?: throw IllegalArgumentException("playlistId is required")
-    val mapper = SpotifyYouTubeMapper(database)
+    val mapper = SpotifyYouTubeMapper(database, context.dataStore)
 
     private val _playlist = MutableStateFlow<SpotifyPlaylist?>(null)
     val playlist = _playlist.asStateFlow()
