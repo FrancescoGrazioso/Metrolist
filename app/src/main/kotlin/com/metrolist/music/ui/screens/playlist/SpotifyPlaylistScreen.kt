@@ -59,8 +59,10 @@ import com.metrolist.music.ui.component.YouTubeMatchDialog
 import com.metrolist.music.ui.utils.backToMain
 import com.metrolist.music.utils.joinByBullet
 import com.metrolist.music.utils.makeTimeString
+import androidx.compose.ui.platform.LocalContext
 import com.metrolist.music.LocalDatabase
 import com.metrolist.music.playback.SpotifyYouTubeMapper
+import com.metrolist.music.utils.dataStore
 import com.metrolist.music.viewmodels.SpotifyPlaylistViewModel
 import com.metrolist.spotify.SpotifyMapper
 import com.metrolist.spotify.models.SpotifyTrack
@@ -86,7 +88,8 @@ fun SpotifyPlaylistScreen(
     val lazyListState = rememberLazyListState()
 
     var overrideTarget by remember { mutableStateOf<SpotifyTrack?>(null) }
-    val mapper = remember { SpotifyYouTubeMapper(database) }
+    val context = LocalContext.current
+    val mapper = remember { SpotifyYouTubeMapper(database, context.dataStore) }
 
     overrideTarget?.let { track ->
         val currentMatch by produceState<com.metrolist.music.db.entities.SpotifyMatchEntity?>(

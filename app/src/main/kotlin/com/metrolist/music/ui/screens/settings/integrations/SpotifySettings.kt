@@ -33,12 +33,12 @@ import com.metrolist.music.LocalPlayerAwareWindowInsets
 import com.metrolist.music.R
 import com.metrolist.music.constants.EnableSpotifyKey
 import com.metrolist.music.constants.SpotifyAccessTokenKey
+import com.metrolist.music.constants.SpotifyHomeOnlyKey
 import com.metrolist.music.constants.SpotifySpDcKey
 import com.metrolist.music.constants.SpotifySpKeyKey
 import com.metrolist.music.constants.SpotifyTokenExpiryKey
 import com.metrolist.music.constants.SpotifyUserIdKey
 import com.metrolist.music.constants.SpotifyUsernameKey
-import com.metrolist.music.constants.SpotifyHomeOnlyKey
 import com.metrolist.music.constants.UseSpotifyHomeKey
 import com.metrolist.music.constants.UseSpotifySearchKey
 import com.metrolist.music.ui.component.IconButton
