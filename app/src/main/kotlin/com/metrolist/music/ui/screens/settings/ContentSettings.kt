@@ -65,6 +65,7 @@ import com.metrolist.music.constants.EnableLrcLibKey
 import com.metrolist.music.constants.EnableSimpMusicKey
 import com.metrolist.music.constants.EnableLyricsPlus
 import com.metrolist.music.constants.HideAtvSongsKey
+import com.metrolist.music.constants.ShowVideoTypeBadgesKey
 import com.metrolist.music.constants.HideExplicitKey
 import com.metrolist.music.constants.HideOmvSongsKey
 import com.metrolist.music.constants.HideUgcSongsKey
@@ -116,6 +117,7 @@ fun ContentSettings(
     val (hideUgcSongs, onHideUgcSongsChange) = rememberPreference(key = HideUgcSongsKey, defaultValue = false)
     val (hideOmvSongs, onHideOmvSongsChange) = rememberPreference(key = HideOmvSongsKey, defaultValue = false)
     val (hideAtvSongs, onHideAtvSongsChange) = rememberPreference(key = HideAtvSongsKey, defaultValue = false)
+    val (showVideoTypeBadges, onShowVideoTypeBadgesChange) = rememberPreference(key = ShowVideoTypeBadgesKey, defaultValue = true)
     val (showArtistDescription, onShowArtistDescriptionChange) = rememberPreference(key = ShowArtistDescriptionKey, defaultValue = true)
     val (showArtistSubscriberCount, onShowArtistSubscriberCountChange) = rememberPreference(key = ShowArtistSubscriberCountKey, defaultValue = true)
     val (showMonthlyListeners, onShowMonthlyListenersChange) = rememberPreference(key = ShowMonthlyListenersKey, defaultValue = true)
@@ -797,6 +799,27 @@ fun ContentSettings(
                         )
                     },
                     onClick = { onHideAtvSongsChange(!hideAtvSongs) }
+                ),
+                Material3SettingsItem(
+                    icon = painterResource(R.drawable.info),
+                    title = { Text(stringResource(R.string.show_video_type_badges)) },
+                    description = { Text(stringResource(R.string.show_video_type_badges_description)) },
+                    trailingContent = {
+                        Switch(
+                            checked = showVideoTypeBadges,
+                            onCheckedChange = onShowVideoTypeBadgesChange,
+                            thumbContent = {
+                                Icon(
+                                    painter = painterResource(
+                                        id = if (showVideoTypeBadges) R.drawable.check else R.drawable.close
+                                    ),
+                                    contentDescription = null,
+                                    modifier = Modifier.size(SwitchDefaults.IconSize)
+                                )
+                            }
+                        )
+                    },
+                    onClick = { onShowVideoTypeBadgesChange(!showVideoTypeBadges) }
                 )
             )
         )

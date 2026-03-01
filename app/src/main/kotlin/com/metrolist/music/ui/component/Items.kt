@@ -101,6 +101,7 @@ import com.metrolist.music.LocalDatabase
 import com.metrolist.music.LocalDownloadUtil
 import com.metrolist.music.LocalPlayerConnection
 import com.metrolist.music.R
+import com.metrolist.music.constants.ShowVideoTypeBadgesKey
 import com.metrolist.music.constants.CropAlbumArtKey
 import com.metrolist.music.constants.GridItemSize
 import com.metrolist.music.constants.GridItemsSizeKey
@@ -1761,6 +1762,8 @@ object Icon {
 
     @Composable
     fun VideoTypeBadge(musicVideoType: String?) {
+        val showBadges by rememberPreference(ShowVideoTypeBadgesKey, defaultValue = true)
+        if (!showBadges) return
         val (label, color) = when (musicVideoType) {
             MUSIC_VIDEO_TYPE_ATV -> "ATV" to Color(0xFF4CAF50)
             MUSIC_VIDEO_TYPE_OMV -> "OMV" to Color(0xFF2196F3)
