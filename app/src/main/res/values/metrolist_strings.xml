@@ -407,6 +407,8 @@
     <string name="hide_omv_songs_description">Hide official music videos from artists</string>
     <string name="hide_atv_songs">Hide audio tracks (ATV)</string>
     <string name="hide_atv_songs_description">Hide official studio audio tracks (not recommended)</string>
+    <string name="show_video_type_badges">Show video type badges</string>
+    <string name="show_video_type_badges_description">Show ATV/OMV/UGC badges on songs</string>
     <string name="spotify_top_tracks">Your Top Tracks</string>
     <string name="spotify_top_artists">Your Top Artists</string>
     <string name="spotify_made_for_you">All-Time Favorites</string>
