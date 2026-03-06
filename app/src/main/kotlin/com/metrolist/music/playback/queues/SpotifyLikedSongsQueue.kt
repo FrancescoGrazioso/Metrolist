@@ -99,6 +99,21 @@ class SpotifyLikedSongsQueue(
         }
     }
 
+    override suspend fun shuffleRemainingTracks() = withContext(Dispatchers.IO) {
+        while (apiHasMore) {
+            fetchNextApiPage()
+        }
+        if (resolveOffset < allTracks.size) {
+            val remaining = allTracks.subList(resolveOffset, allTracks.size)
+            val shuffled = remaining.shuffled()
+            for (i in shuffled.indices) {
+                remaining[i] = shuffled[i]
+            }
+            Timber.d("SpotifyLikedSongsQueue: Shuffled ${remaining.size} remaining tracks " +
+                "(resolveOffset=$resolveOffset, total=${allTracks.size})")
+        }
+    }
+
     override fun hasNextPage(): Boolean =
         resolveOffset < allTracks.size || apiHasMore
 

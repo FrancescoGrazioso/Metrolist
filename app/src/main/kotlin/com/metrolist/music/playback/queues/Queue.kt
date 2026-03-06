@@ -18,6 +18,14 @@ interface Queue {
 
     suspend fun nextPage(): List<MediaItem>
 
+    /**
+     * Shuffle all tracks that haven't been resolved yet.
+     * For queues backed by a paginated API, this fetches all remaining
+     * pages first so the shuffle covers the entire source list.
+     * Default no-op for queues that don't support source-level shuffle.
+     */
+    suspend fun shuffleRemainingTracks() {}
+
     data class Status(
         val title: String?,
         val items: List<MediaItem>,

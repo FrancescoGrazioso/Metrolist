@@ -1350,6 +1350,10 @@ class MusicService :
             if (player.shuffleModeEnabled) {
                 val shufflePlaylistFirst = dataStore.get(ShufflePlaylistFirstKey, false)
                 applyShuffleOrder(player.currentMediaItemIndex, player.mediaItemCount, shufflePlaylistFirst)
+                // Shuffle the queue's unresolved source tracks so that nextPage()
+                // returns items from across the entire playlist, not just the next
+                // sequential batch
+                withContext(Dispatchers.IO) { queue.shuffleRemainingTracks() }
             }
 
             // Eagerly load the next page if the initial status has few items
@@ -2103,6 +2107,10 @@ class MusicService :
             val totalCount = player.mediaItemCount
 
             applyShuffleOrder(currentIndex, totalCount, shufflePlaylistFirst)
+
+            // Also shuffle the queue's unresolved source tracks so future
+            // nextPage() calls return items from across the entire playlist
+            scope.launch(Dispatchers.IO) { currentQueue.shuffleRemainingTracks() }
         }
 
         // Save shuffle mode to preferences
