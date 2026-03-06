@@ -5,22 +5,14 @@
 
 package com.metrolist.music.playback
 
-import androidx.datastore.core.DataStore
-import androidx.datastore.preferences.core.Preferences
 import com.metrolist.innertube.YouTube
 import com.metrolist.innertube.models.SongItem
 import com.metrolist.innertube.models.WatchEndpoint.WatchEndpointMusicSupportedConfigs.WatchEndpointMusicConfig.Companion.MUSIC_VIDEO_TYPE_ATV
-import com.metrolist.innertube.models.WatchEndpoint.WatchEndpointMusicSupportedConfigs.WatchEndpointMusicConfig.Companion.MUSIC_VIDEO_TYPE_OMV
-import com.metrolist.innertube.models.WatchEndpoint.WatchEndpointMusicSupportedConfigs.WatchEndpointMusicConfig.Companion.MUSIC_VIDEO_TYPE_UGC
 import com.metrolist.innertube.pages.SearchSummaryPage
-import com.metrolist.music.constants.HideAtvSongsKey
-import com.metrolist.music.constants.HideOmvSongsKey
-import com.metrolist.music.constants.HideUgcSongsKey
 import com.metrolist.music.db.MusicDatabase
 import com.metrolist.music.db.entities.SpotifyMatchEntity
 import com.metrolist.music.extensions.toMediaItem
 import com.metrolist.music.models.MediaMetadata
-import com.metrolist.music.utils.get
 import com.metrolist.spotify.SpotifyMapper
 import com.metrolist.spotify.models.SpotifyTrack
 import kotlinx.coroutines.Dispatchers
@@ -34,19 +26,18 @@ import timber.log.Timber
  */
 class SpotifyYouTubeMapper(
     private val database: MusicDatabase,
-    private val dataStore: DataStore<Preferences>,
 ) {
     /**
      * Maps a Spotify track to a YouTube MediaMetadata by searching YouTube Music.
      * Returns null if no suitable match is found.
+     *
+     * @param hiddenTypes set of MUSIC_VIDEO_TYPE_* constants to exclude from results.
+     *                    Read once by the caller from DataStore preferences.
      */
-    suspend fun mapToYouTube(track: SpotifyTrack): MediaMetadata? = withContext(Dispatchers.IO) {
-        val hiddenTypes = buildSet {
-            if (dataStore.get(HideUgcSongsKey, false)) add(MUSIC_VIDEO_TYPE_UGC)
-            if (dataStore.get(HideOmvSongsKey, false)) add(MUSIC_VIDEO_TYPE_OMV)
-            if (dataStore.get(HideAtvSongsKey, false)) add(MUSIC_VIDEO_TYPE_ATV)
-        }
-
+    suspend fun mapToYouTube(
+        track: SpotifyTrack,
+        hiddenTypes: Set<String> = emptySet(),
+    ): MediaMetadata? = withContext(Dispatchers.IO) {
         val cached = database.getSpotifyMatch(track.id)
         if (cached != null && !cached.isManualOverride && cached.musicVideoType in hiddenTypes) {
             Timber.d("Spotify cache hit but type ${cached.musicVideoType} is hidden, re-resolving: ${track.name}")
@@ -117,9 +108,12 @@ class SpotifyYouTubeMapper(
      * ResolvingDataSource to resolve the actual stream URL.
      * Returns null if no match was found (track will be skipped).
      */
-    suspend fun resolveToMediaItem(track: SpotifyTrack): androidx.media3.common.MediaItem? {
+    suspend fun resolveToMediaItem(
+        track: SpotifyTrack,
+        hiddenTypes: Set<String> = emptySet(),
+    ): androidx.media3.common.MediaItem? {
         Timber.d("SpotifyMapper: resolving '${track.name}' by ${track.artists.firstOrNull()?.name}")
-        val metadata = mapToYouTube(track)
+        val metadata = mapToYouTube(track, hiddenTypes)
         if (metadata == null) {
             Timber.w("SpotifyMapper: FAILED to resolve '${track.name}' - no YouTube match")
             return null
@@ -137,16 +131,19 @@ class SpotifyYouTubeMapper(
         val candidates = mutableListOf<MatchCandidate>()
 
         // Extract SongItems from all search summaries, filtering hidden video types
-        val songs = searchResult.summaries
+        val allSongs = searchResult.summaries
             .flatMap { it.items }
             .filterIsInstance<SongItem>()
-            .let { list ->
-                if (hiddenTypes.isNotEmpty()) {
-                    list.filter { it.musicVideoType !in hiddenTypes }
-                } else {
-                    list
-                }
+        val songs = if (hiddenTypes.isNotEmpty()) {
+            val filtered = allSongs.filter { it.musicVideoType !in hiddenTypes }
+            // Guard: if all candidates were filtered out, fall back to unfiltered list
+            filtered.ifEmpty {
+                Timber.w("All candidates filtered by hiddenTypes=$hiddenTypes, falling back to unfiltered")
+                allSongs
             }
+        } else {
+            allSongs
+        }
 
         for (song in songs) {
             val rawScore = SpotifyMapper.matchScore(

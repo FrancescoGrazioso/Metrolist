@@ -64,7 +64,6 @@ import com.metrolist.music.constants.EnableKugouKey
 import com.metrolist.music.constants.EnableLrcLibKey
 import com.metrolist.music.constants.EnableSimpMusicKey
 import com.metrolist.music.constants.EnableLyricsPlus
-import com.metrolist.music.constants.HideAtvSongsKey
 import com.metrolist.music.constants.ShowVideoTypeBadgesKey
 import com.metrolist.music.constants.HideExplicitKey
 import com.metrolist.music.constants.HideOmvSongsKey
@@ -116,7 +115,6 @@ fun ContentSettings(
     val (hideYoutubeShorts, onHideYoutubeShortsChange) = rememberPreference(key = HideYoutubeShortsKey, defaultValue = false)
     val (hideUgcSongs, onHideUgcSongsChange) = rememberPreference(key = HideUgcSongsKey, defaultValue = false)
     val (hideOmvSongs, onHideOmvSongsChange) = rememberPreference(key = HideOmvSongsKey, defaultValue = false)
-    val (hideAtvSongs, onHideAtvSongsChange) = rememberPreference(key = HideAtvSongsKey, defaultValue = false)
     val (showVideoTypeBadges, onShowVideoTypeBadgesChange) = rememberPreference(key = ShowVideoTypeBadgesKey, defaultValue = true)
     val (showArtistDescription, onShowArtistDescriptionChange) = rememberPreference(key = ShowArtistDescriptionKey, defaultValue = true)
     val (showArtistSubscriberCount, onShowArtistSubscriberCountChange) = rememberPreference(key = ShowArtistSubscriberCountKey, defaultValue = true)
@@ -778,27 +776,6 @@ fun ContentSettings(
                         )
                     },
                     onClick = { onHideOmvSongsChange(!hideOmvSongs) }
-                ),
-                Material3SettingsItem(
-                    icon = painterResource(R.drawable.music_note),
-                    title = { Text(stringResource(R.string.hide_atv_songs)) },
-                    description = { Text(stringResource(R.string.hide_atv_songs_description)) },
-                    trailingContent = {
-                        Switch(
-                            checked = hideAtvSongs,
-                            onCheckedChange = onHideAtvSongsChange,
-                            thumbContent = {
-                                Icon(
-                                    painter = painterResource(
-                                        id = if (hideAtvSongs) R.drawable.check else R.drawable.close
-                                    ),
-                                    contentDescription = null,
-                                    modifier = Modifier.size(SwitchDefaults.IconSize)
-                                )
-                            }
-                        )
-                    },
-                    onClick = { onHideAtvSongsChange(!hideAtvSongs) }
                 ),
                 Material3SettingsItem(
                     icon = painterResource(R.drawable.info),

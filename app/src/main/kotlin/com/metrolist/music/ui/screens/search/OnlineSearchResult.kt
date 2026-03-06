@@ -62,6 +62,7 @@ import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.navigation.NavController
+import com.metrolist.innertube.YouTube
 import com.metrolist.innertube.YouTube.SearchFilter.Companion.FILTER_ALBUM
 import com.metrolist.innertube.YouTube.SearchFilter.Companion.FILTER_ARTIST
 import com.metrolist.innertube.YouTube.SearchFilter.Companion.FILTER_COMMUNITY_PLAYLIST
@@ -76,10 +77,14 @@ import com.metrolist.innertube.models.PlaylistItem
 import com.metrolist.innertube.models.PodcastItem
 import com.metrolist.innertube.models.SongItem
 import com.metrolist.innertube.models.WatchEndpoint
+import com.metrolist.innertube.models.WatchEndpoint.WatchEndpointMusicSupportedConfigs.WatchEndpointMusicConfig.Companion.MUSIC_VIDEO_TYPE_OMV
+import com.metrolist.innertube.models.WatchEndpoint.WatchEndpointMusicSupportedConfigs.WatchEndpointMusicConfig.Companion.MUSIC_VIDEO_TYPE_UGC
 import com.metrolist.innertube.models.YTItem
 import com.metrolist.music.LocalDatabase
 import com.metrolist.music.LocalPlayerConnection
 import com.metrolist.music.R
+import com.metrolist.music.constants.HideOmvSongsKey
+import com.metrolist.music.constants.HideUgcSongsKey
 import com.metrolist.music.constants.MiniPlayerBottomSpacing
 import com.metrolist.music.constants.MiniPlayerHeight
 import com.metrolist.music.constants.NavigationBarHeight
@@ -89,30 +94,27 @@ import com.metrolist.music.models.toMediaMetadata
 import com.metrolist.music.playback.queues.SpotifyQueue
 import com.metrolist.music.playback.queues.YouTubeQueue
 import com.metrolist.music.ui.component.ChipsRow
-import com.metrolist.music.ui.component.HideOnScrollFAB
 import com.metrolist.music.ui.component.EmptyPlaceholder
+import com.metrolist.music.ui.component.HideOnScrollFAB
 import com.metrolist.music.ui.component.LocalMenuState
 import com.metrolist.music.ui.component.NavigationTitle
 import com.metrolist.music.ui.component.YouTubeListItem
-import com.metrolist.music.ui.component.Icon as MIcon
-import com.metrolist.music.LocalDownloadUtil
 import com.metrolist.music.ui.component.shimmer.ListItemPlaceHolder
 import com.metrolist.music.ui.component.shimmer.ShimmerHost
 import com.metrolist.music.ui.menu.YouTubeAlbumMenu
 import com.metrolist.music.ui.menu.YouTubeArtistMenu
 import com.metrolist.music.ui.menu.YouTubePlaylistMenu
 import com.metrolist.music.ui.menu.YouTubeSongMenu
-import com.metrolist.music.utils.rememberPreference
 import com.metrolist.music.utils.isSpotifyId
+import com.metrolist.music.utils.rememberPreference
 import com.metrolist.music.utils.stripSpotifyPrefix
 import com.metrolist.music.utils.toSpotifyTrackStub
 import com.metrolist.music.viewmodels.OnlineSearchViewModel
-import com.metrolist.innertube.YouTube
+import java.net.URLDecoder
+import java.net.URLEncoder
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.launch
-import java.net.URLDecoder
-import java.net.URLEncoder
 
 @OptIn(ExperimentalFoundationApi::class, ExperimentalMaterial3Api::class)
 @Composable
@@ -138,6 +140,14 @@ fun OnlineSearchResult(
     val resolvedVideoTypes by viewModel.resolvedVideoTypes.collectAsState()
 
     val pauseSearchHistory by rememberPreference(PauseSearchHistoryKey, defaultValue = false)
+    val (hideUgc) = rememberPreference(HideUgcSongsKey, defaultValue = false)
+    val (hideOmv) = rememberPreference(HideOmvSongsKey, defaultValue = false)
+    val hiddenVideoTypes = remember(hideUgc, hideOmv) {
+        buildSet {
+            if (hideUgc) add(MUSIC_VIDEO_TYPE_UGC)
+            if (hideOmv) add(MUSIC_VIDEO_TYPE_OMV)
+        }
+    }
 
     BackHandler(enabled = isSearchFocused) {
         isSearchFocused = false
@@ -261,11 +271,15 @@ fun OnlineSearchResult(
                 }
             }
         }
-        val resolvedType = if (item is SongItem && item.id.isSpotifyId()) {
-            resolvedVideoTypes[item.id]
-        } else null
+        // Patch the resolved musicVideoType into Spotify SongItems
+        // so the default badges lambda in YouTubeListItem picks it up
+        val displayItem = if (item is SongItem && item.id.isSpotifyId()) {
+            resolvedVideoTypes[item.id]?.let { item.copy(musicVideoType = it) } ?: item
+        } else {
+            item
+        }
         YouTubeListItem(
-            item = item,
+            item = displayItem,
             isActive =
             when (item) {
                 is SongItem -> mediaMetadata?.id == item.id
@@ -274,27 +288,6 @@ fun OnlineSearchResult(
                 else -> false
             },
             isPlaying = isPlaying,
-            badges = {
-                val database = LocalDatabase.current
-                val song by androidx.compose.runtime.produceState<com.metrolist.music.db.entities.Song?>(initialValue = null, item.id) {
-                    if (item is SongItem) value = database.song(item.id).firstOrNull()
-                }
-                val album by androidx.compose.runtime.produceState<com.metrolist.music.db.entities.Album?>(initialValue = null, item.id) {
-                    if (item is AlbumItem) value = database.album(item.id).firstOrNull()
-                }
-                if ((item is SongItem && song?.song?.liked == true) ||
-                    (item is AlbumItem && album?.album?.bookmarkedAt != null)
-                ) {
-                    MIcon.Favorite()
-                }
-                if (item.explicit) MIcon.Explicit()
-                if (item is SongItem) {
-                    // Show resolved video type for Spotify items, or native type for YouTube items
-                    MIcon.VideoTypeBadge(resolvedType ?: item.musicVideoType)
-                    val download by LocalDownloadUtil.current.getDownload(item.id).collectAsState(null)
-                    MIcon.Download(download?.state)
-                }
-            },
             trailingContent = {
                 IconButton(
                     onClick = longClick,
@@ -321,6 +314,7 @@ fun OnlineSearchResult(
                                             SpotifyQueue(
                                                 initialTrack = spotifyTrack,
                                                 mapper = viewModel.spotifyYouTubeMapper,
+                                                hiddenTypes = hiddenVideoTypes,
                                             )
                                         )
                                     }

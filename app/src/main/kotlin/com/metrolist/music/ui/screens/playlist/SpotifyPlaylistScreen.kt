@@ -61,8 +61,12 @@ import com.metrolist.music.utils.joinByBullet
 import com.metrolist.music.utils.makeTimeString
 import androidx.compose.ui.platform.LocalContext
 import com.metrolist.music.LocalDatabase
+import com.metrolist.innertube.models.WatchEndpoint.WatchEndpointMusicSupportedConfigs.WatchEndpointMusicConfig.Companion.MUSIC_VIDEO_TYPE_OMV
+import com.metrolist.innertube.models.WatchEndpoint.WatchEndpointMusicSupportedConfigs.WatchEndpointMusicConfig.Companion.MUSIC_VIDEO_TYPE_UGC
+import com.metrolist.music.constants.HideOmvSongsKey
+import com.metrolist.music.constants.HideUgcSongsKey
 import com.metrolist.music.playback.SpotifyYouTubeMapper
-import com.metrolist.music.utils.dataStore
+import com.metrolist.music.utils.rememberPreference
 import com.metrolist.music.viewmodels.SpotifyPlaylistViewModel
 import com.metrolist.spotify.SpotifyMapper
 import com.metrolist.spotify.models.SpotifyTrack
@@ -89,7 +93,15 @@ fun SpotifyPlaylistScreen(
 
     var overrideTarget by remember { mutableStateOf<SpotifyTrack?>(null) }
     val context = LocalContext.current
-    val mapper = remember { SpotifyYouTubeMapper(database, context.dataStore) }
+    val mapper = remember { SpotifyYouTubeMapper(database) }
+    val (hideUgc) = rememberPreference(HideUgcSongsKey, defaultValue = false)
+    val (hideOmv) = rememberPreference(HideOmvSongsKey, defaultValue = false)
+    val hiddenVideoTypes = remember(hideUgc, hideOmv) {
+        buildSet {
+            if (hideUgc) add(MUSIC_VIDEO_TYPE_UGC)
+            if (hideOmv) add(MUSIC_VIDEO_TYPE_OMV)
+        }
+    }
 
     overrideTarget?.let { track ->
         val currentMatch by produceState<com.metrolist.music.db.entities.SpotifyMatchEntity?>(
@@ -159,6 +171,7 @@ fun SpotifyPlaylistScreen(
                                             initialTracks = tracks,
                                             startIndex = 0,
                                             mapper = viewModel.mapper,
+                                            hiddenTypes = hiddenVideoTypes,
                                         )
                                     )
                                 },
@@ -259,6 +272,7 @@ fun SpotifyPlaylistScreen(
                                         initialTracks = tracks,
                                         startIndex = index,
                                         mapper = viewModel.mapper,
+                                        hiddenTypes = hiddenVideoTypes,
                                     )
                                 )
                             },

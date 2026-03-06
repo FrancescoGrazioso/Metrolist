@@ -40,6 +40,7 @@ import timber.log.Timber
 class SpotifyQueue(
     private val initialTrack: SpotifyTrack,
     private val mapper: SpotifyYouTubeMapper,
+    private val hiddenTypes: Set<String> = emptySet(),
     private val context: Context? = null,
     private val database: MusicDatabase? = null,
     override val preloadItem: MediaMetadata? = null,
@@ -54,7 +55,7 @@ class SpotifyQueue(
     private var resolveOffset = 0
 
     override suspend fun getInitialStatus(): Queue.Status = withContext(Dispatchers.IO) {
-        val initialMediaItem = mapper.resolveToMediaItem(initialTrack)
+        val initialMediaItem = mapper.resolveToMediaItem(initialTrack, hiddenTypes)
 
         if (initialMediaItem == null) {
             Timber.w("SpotifyQueue: Could not resolve initial track '${initialTrack.name}'")
@@ -154,7 +155,7 @@ class SpotifyQueue(
         )
 
         coroutineScope {
-            batch.map { track -> async { mapper.resolveToMediaItem(track) } }
+            batch.map { track -> async { mapper.resolveToMediaItem(track, hiddenTypes) } }
                 .awaitAll()
                 .filterNotNull()
         }
