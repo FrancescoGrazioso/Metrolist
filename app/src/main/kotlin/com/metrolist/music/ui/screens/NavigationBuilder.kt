@@ -60,6 +60,7 @@ import com.metrolist.music.ui.screens.settings.integrations.DiscordSettings
 import com.metrolist.music.ui.screens.settings.integrations.IntegrationScreen
 import com.metrolist.music.ui.screens.settings.integrations.LastFMSettings
 import com.metrolist.music.ui.screens.settings.integrations.ListenTogetherSettings
+import com.metrolist.music.ui.screens.settings.integrations.SpotifyPreloadScreen
 import com.metrolist.music.ui.screens.settings.integrations.SpotifySettings
 import com.metrolist.music.ui.screens.recognition.RecognitionScreen
 import com.metrolist.music.ui.screens.recognition.RecognitionHistoryScreen
@@ -392,6 +393,10 @@ fun NavGraphBuilder.navigationBuilder(
 
     composable("settings/integrations/spotify") {
         SpotifySettings(navController, scrollBehavior)
+    }
+
+    composable("settings/integrations/spotify/preload") {
+        SpotifyPreloadScreen(navController, scrollBehavior)
     }
 
     composable("settings/spotify/login") {

@@ -211,6 +211,9 @@ import kotlin.time.Duration.Companion.seconds
 private const val INSTANT_SILENCE_SKIP_STEP_MS = 15_000L
 private const val INSTANT_SILENCE_SKIP_SETTLE_MS = 350L
 
+/** When the queue has this many or fewer items (or items ahead of current), load more from paginated queues (e.g. Spotify). */
+private const val QUEUE_PRELOAD_AHEAD_THRESHOLD = 20
+
 @OptIn(ExperimentalCoroutinesApi::class, FlowPreview::class)
 @androidx.annotation.OptIn(UnstableApi::class)
 @AndroidEntryPoint
@@ -1346,29 +1349,34 @@ class MusicService :
                 player.playWhenReady = playWhenReady
             }
 
-            // Rebuild shuffle order if shuffle is enabled
+            // When shuffle is enabled, load the entire queue into the player so that
+            // shuffle applies to the full playlist (e.g. all 227 liked songs), not just
+            // the initial window of ~25 items.
             if (player.shuffleModeEnabled) {
+                withContext(Dispatchers.IO) { queue.shuffleRemainingTracks() }
+                while (queue.hasNextPage()) {
+                    val moreItems = withContext(Dispatchers.IO) {
+                        queue.nextPage()
+                            .filterExplicit(dataStore.get(HideExplicitKey, false))
+                            .filterVideoSongs(dataStore.get(HideVideoSongsKey, false))
+                    }
+                    if (moreItems.isEmpty()) break
+                    player.addMediaItems(moreItems)
+                }
+                originalQueueSize = player.mediaItemCount
                 val shufflePlaylistFirst = dataStore.get(ShufflePlaylistFirstKey, false)
                 applyShuffleOrder(player.currentMediaItemIndex, player.mediaItemCount, shufflePlaylistFirst)
-                // Shuffle the queue's unresolved source tracks so that nextPage()
-                // returns items from across the entire playlist, not just the next
-                // sequential batch
-                withContext(Dispatchers.IO) { queue.shuffleRemainingTracks() }
-            }
-
-            // Eagerly load the next page if the initial status has few items
-            // (e.g. Spotify queues return only the selected track for instant playback)
-            if (player.mediaItemCount <= 5 && queue.hasNextPage()) {
-                val moreItems = withContext(Dispatchers.IO) {
-                    queue.nextPage()
-                        .filterExplicit(dataStore.get(HideExplicitKey, false))
-                        .filterVideoSongs(dataStore.get(HideVideoSongsKey, false))
-                }
-                if (moreItems.isNotEmpty()) {
-                    player.addMediaItems(moreItems)
-                    if (player.shuffleModeEnabled) {
-                        val shufflePlaylistFirst = dataStore.get(ShufflePlaylistFirstKey, false)
-                        applyShuffleOrder(player.currentMediaItemIndex, player.mediaItemCount, shufflePlaylistFirst)
+            } else {
+                // Eagerly load the next page if the initial status has few items
+                // (e.g. Spotify queues return only the selected track for instant playback)
+                if (player.mediaItemCount <= QUEUE_PRELOAD_AHEAD_THRESHOLD && queue.hasNextPage()) {
+                    val moreItems = withContext(Dispatchers.IO) {
+                        queue.nextPage()
+                            .filterExplicit(dataStore.get(HideExplicitKey, false))
+                            .filterVideoSongs(dataStore.get(HideVideoSongsKey, false))
+                    }
+                    if (moreItems.isNotEmpty()) {
+                        player.addMediaItems(moreItems)
                     }
                 }
             }
@@ -1940,10 +1948,10 @@ class MusicService :
             }
         }
 
-        // Auto load more songs from queue
+        // Auto load more songs from queue (lazy load: keep QUEUE_PRELOAD_AHEAD_THRESHOLD items ahead)
         if (dataStore.get(AutoLoadMoreKey, true) &&
             reason != Player.MEDIA_ITEM_TRANSITION_REASON_REPEAT &&
-            player.mediaItemCount - player.currentMediaItemIndex <= 5 &&
+            player.mediaItemCount - player.currentMediaItemIndex <= QUEUE_PRELOAD_AHEAD_THRESHOLD &&
             currentQueue.hasNextPage() &&
             !(dataStore.get(DisableLoadMoreWhenRepeatAllKey, false) && player.repeatMode == REPEAT_MODE_ALL)
         ) {
@@ -2099,18 +2107,31 @@ class MusicService :
     override fun onShuffleModeEnabledChanged(shuffleModeEnabled: Boolean) {
         updateNotification()
         if (shuffleModeEnabled) {
-            // If queue is empty, don't shuffle
             if (player.mediaItemCount == 0) return
 
-            val shufflePlaylistFirst = dataStore.get(ShufflePlaylistFirstKey, false)
-            val currentIndex = player.currentMediaItemIndex
-            val totalCount = player.mediaItemCount
-
-            applyShuffleOrder(currentIndex, totalCount, shufflePlaylistFirst)
-
-            // Also shuffle the queue's unresolved source tracks so future
-            // nextPage() calls return items from across the entire playlist
-            scope.launch(Dispatchers.IO) { currentQueue.shuffleRemainingTracks() }
+            val queue = currentQueue ?: return
+            // If the queue has more pages (e.g. Spotify), load them all so shuffle
+            // applies to the full playlist, not just the current window.
+            if (queue.hasNextPage()) {
+                scope.launch(SilentHandler) {
+                    withContext(Dispatchers.IO) { queue.shuffleRemainingTracks() }
+                    while (queue.hasNextPage()) {
+                        val moreItems = withContext(Dispatchers.IO) {
+                            queue.nextPage()
+                                .filterExplicit(dataStore.get(HideExplicitKey, false))
+                                .filterVideoSongs(dataStore.get(HideVideoSongsKey, false))
+                        }
+                        if (moreItems.isEmpty()) break
+                        player.addMediaItems(moreItems)
+                    }
+                    originalQueueSize = player.mediaItemCount
+                    val shufflePlaylistFirst = dataStore.get(ShufflePlaylistFirstKey, false)
+                    applyShuffleOrder(player.currentMediaItemIndex, player.mediaItemCount, shufflePlaylistFirst)
+                }
+            } else {
+                val shufflePlaylistFirst = dataStore.get(ShufflePlaylistFirstKey, false)
+                applyShuffleOrder(player.currentMediaItemIndex, player.mediaItemCount, shufflePlaylistFirst)
+            }
         }
 
         // Save shuffle mode to preferences

@@ -172,6 +172,28 @@ fun SpotifySettings(
             }
 
             PreferenceGroupTitle(
+                title = stringResource(R.string.spotify_preload_songs),
+            )
+
+            PreferenceEntry(
+                title = { Text(stringResource(R.string.spotify_preload_songs)) },
+                description = stringResource(R.string.spotify_preload_songs_description),
+                icon = {
+                    Icon(
+                        painterResource(R.drawable.spotify),
+                        contentDescription = null,
+                    )
+                },
+                trailingContent = {
+                    OutlinedButton(
+                        onClick = { navController.navigate("settings/integrations/spotify/preload") },
+                    ) {
+                        Text(stringResource(R.string.spotify_preload_start))
+                    }
+                },
+            )
+
+            PreferenceGroupTitle(
                 title = stringResource(R.string.information),
             )
 
