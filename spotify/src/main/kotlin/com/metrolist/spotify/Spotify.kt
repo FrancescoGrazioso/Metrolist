@@ -346,9 +346,23 @@ object Spotify {
             name = trackData.str("name") ?: "",
             artists = artists,
             album = album,
-            durationMs = trackData.obj("duration")?.int("totalMilliseconds") ?: 0,
+            durationMs = parseGqlTrackDurationMs(trackData),
             uri = uri.ifEmpty { null },
         )
+    }
+
+    /**
+     * Extracts track duration in ms from GQL track payload.
+     * Tries multiple keys because different operations may return duration
+     * as nested (duration.totalMilliseconds) or flat (durationMs / duration_ms).
+     */
+    private fun parseGqlTrackDurationMs(trackData: JsonObject): Int {
+        trackData.obj("duration")?.int("totalMilliseconds")?.let { if (it > 0) return it }
+        trackData.int("durationMs")?.let { if (it > 0) return it }
+        trackData.int("duration_ms")?.let { if (it > 0) return it }
+        // Some APIs return duration in seconds
+        trackData.int("duration")?.let { sec -> if (sec > 0) return sec * 1000 }
+        return 0
     }
 
     /**

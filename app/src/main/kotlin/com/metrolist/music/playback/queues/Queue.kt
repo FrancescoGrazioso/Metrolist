@@ -14,9 +14,25 @@ interface Queue {
 
     suspend fun getInitialStatus(): Status
 
+    /**
+     * Returns the full list of items for the whole source (e.g. entire playlist)
+     * with [Status.mediaItemIndex] set to the desired start position.
+     * Use this when shuffle is enabled so the player can shuffle all items, not just a window.
+     * Default returns null (queue does not support full-list shuffle).
+     */
+    suspend fun getFullStatus(): Status? = null
+
     fun hasNextPage(): Boolean
 
     suspend fun nextPage(): List<MediaItem>
+
+    /**
+     * Shuffle all tracks that haven't been resolved yet.
+     * For queues backed by a paginated API, this fetches all remaining
+     * pages first so the shuffle covers the entire source list.
+     * Default no-op for queues that don't support source-level shuffle.
+     */
+    suspend fun shuffleRemainingTracks() {}
 
     data class Status(
         val title: String?,

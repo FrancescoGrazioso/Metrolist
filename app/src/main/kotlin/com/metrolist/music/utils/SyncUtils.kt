@@ -560,26 +560,31 @@ class SyncUtils @Inject constructor(
                     val remoteSongs = page.songs
                     val remoteIds = remoteSongs.map { it.id }.toSet()
                     val localSongs = database.likedSongsByNameAsc().first()
-
-                    // Remove likes from songs not in remote
-                    localSongs.filterNot { it.id in remoteIds }.forEach { song ->
-                        try {
-                            database.update(song.song.localToggleLike())
-                            delay(DB_OPERATION_DELAY_MS)
-                        } catch (e: Exception) {
-                            Timber.e(e, "Failed to update song: ${song.id}")
-                        }
-                    }
-
-                    // Add/update songs from remote
                     val now = LocalDateTime.now()
-                    remoteSongs.forEachIndexed { index, song ->
-                        try {
-                            val dbSong = database.song(song.id).firstOrNull()
-                            val timestamp = now.minusSeconds(index.toLong())
-                            val isVideoSong = song.isVideoSong
 
-                            database.transaction {
+                    // Pre-fetch all existing songs in a single batch query
+                    // so we don't need per-song reads inside the transaction
+                    val existingSongs = database.getSongsByIds(remoteSongs.map { it.id })
+                        .associateBy { it.id }
+
+                    // Wrap all DB writes in a single transaction so Room emits
+                    // only one Flow update with the final state, preventing UI
+                    // flickering from intermediate states during sync
+                    database.withTransaction {
+                        localSongs.filterNot { it.id in remoteIds }.forEach { song ->
+                            try {
+                                update(song.song.localToggleLike())
+                            } catch (e: Exception) {
+                                Timber.e(e, "Failed to update song: ${song.id}")
+                            }
+                        }
+
+                        remoteSongs.forEachIndexed { index, song ->
+                            try {
+                                val dbSong = existingSongs[song.id]
+                                val timestamp = now.minusSeconds(index.toLong())
+                                val isVideoSong = song.isVideoSong
+
                                 if (dbSong == null) {
                                     insert(song.toMediaMetadata()) {
                                         it.copy(liked = true, likedDate = timestamp, isVideo = isVideoSong)
@@ -587,10 +592,9 @@ class SyncUtils @Inject constructor(
                                 } else if (!dbSong.song.liked || dbSong.song.likedDate != timestamp || dbSong.song.isVideo != isVideoSong) {
                                     update(dbSong.song.copy(liked = true, likedDate = timestamp, isVideo = isVideoSong))
                                 }
+                            } catch (e: Exception) {
+                                Timber.e(e, "Failed to process song: ${song.id}")
                             }
-                            delay(DB_OPERATION_DELAY_MS)
-                        } catch (e: Exception) {
-                            Timber.e(e, "Failed to process song: ${song.id}")
                         }
                     }
 
@@ -627,28 +631,29 @@ class SyncUtils @Inject constructor(
                     val remoteIds = remoteSongs.map { it.id }.toSet()
                     val localSongs = database.songsByNameAsc().first()
 
-                    localSongs.filterNot { it.id in remoteIds }.forEach { song ->
-                        try {
-                            database.update(song.song.toggleLibrary())
-                            delay(DB_OPERATION_DELAY_MS)
-                        } catch (e: Exception) {
-                            Timber.e(e, "Failed to update song: ${song.id}")
-                        }
-                    }
+                    val existingSongs = database.getSongsByIds(remoteSongs.map { it.id })
+                        .associateBy { it.id }
 
-                    remoteSongs.forEach { song ->
-                        try {
-                            val dbSong = database.song(song.id).firstOrNull()
-                            database.transaction {
+                    database.withTransaction {
+                        localSongs.filterNot { it.id in remoteIds }.forEach { song ->
+                            try {
+                                update(song.song.toggleLibrary())
+                            } catch (e: Exception) {
+                                Timber.e(e, "Failed to update song: ${song.id}")
+                            }
+                        }
+
+                        remoteSongs.forEach { song ->
+                            try {
+                                val dbSong = existingSongs[song.id]
                                 if (dbSong == null) {
                                     insert(song.toMediaMetadata()) { it.toggleLibrary() }
                                 } else if (dbSong.song.inLibrary == null) {
                                     update(dbSong.song.toggleLibrary())
                                 }
+                            } catch (e: Exception) {
+                                Timber.e(e, "Failed to process song: ${song.id}")
                             }
-                            delay(DB_OPERATION_DELAY_MS)
-                        } catch (e: Exception) {
-                            Timber.e(e, "Failed to process song: ${song.id}")
                         }
                     }
 
@@ -687,35 +692,32 @@ class SyncUtils @Inject constructor(
             result.onSuccess { page ->
                 try {
                     Timber.d("[UPLOAD_DEBUG] Page received, total items: ${page.items.size}")
-                    page.items.forEachIndexed { index, item ->
-                        Timber.d("[UPLOAD_DEBUG] Page item $index: type=${item::class.simpleName}, id=${(item as? SongItem)?.id ?: "N/A"}")
-                    }
                     val remoteSongs = page.items.filterIsInstance<SongItem>().reversed()
                     Timber.d("[UPLOAD_DEBUG] Filtered to ${remoteSongs.size} SongItems")
-                    remoteSongs.forEachIndexed { index, song ->
-                        Timber.d("[UPLOAD_DEBUG] Remote song $index: id=${song.id}, title=${song.title}, artists=${song.artists.map { it.name }}")
-                    }
                     val remoteIds = remoteSongs.map { it.id }.toSet()
                     val localSongs = database.uploadedSongsByNameAsc().first()
                     Timber.d("[UPLOAD_DEBUG] Local uploaded songs count: ${localSongs.size}")
 
                     val songsToRemove = localSongs.filterNot { it.id in remoteIds }
                     Timber.d("[UPLOAD_DEBUG] Songs to remove from uploaded: ${songsToRemove.size}")
-                    songsToRemove.forEach { song ->
-                        try {
-                            Timber.d("[UPLOAD_DEBUG] Removing uploaded flag from: ${song.id}")
-                            database.update(song.song.toggleUploaded())
-                            delay(DB_OPERATION_DELAY_MS)
-                        } catch (e: Exception) {
-                            Timber.e(e, "[UPLOAD_DEBUG] Failed to update song: ${song.id}")
-                        }
-                    }
 
-                    remoteSongs.forEach { song ->
-                        try {
-                            val dbSong = database.song(song.id).firstOrNull()
-                            Timber.d("[UPLOAD_DEBUG] Processing remote song ${song.id}: exists in db=${dbSong != null}, isUploaded=${dbSong?.song?.isUploaded}")
-                            database.transaction {
+                    val existingSongs = database.getSongsByIds(remoteSongs.map { it.id })
+                        .associateBy { it.id }
+
+                    database.withTransaction {
+                        songsToRemove.forEach { song ->
+                            try {
+                                Timber.d("[UPLOAD_DEBUG] Removing uploaded flag from: ${song.id}")
+                                update(song.song.toggleUploaded())
+                            } catch (e: Exception) {
+                                Timber.e(e, "[UPLOAD_DEBUG] Failed to update song: ${song.id}")
+                            }
+                        }
+
+                        remoteSongs.forEach { song ->
+                            try {
+                                val dbSong = existingSongs[song.id]
+                                Timber.d("[UPLOAD_DEBUG] Processing remote song ${song.id}: exists in db=${dbSong != null}, isUploaded=${dbSong?.song?.isUploaded}")
                                 if (dbSong == null) {
                                     Timber.d("[UPLOAD_DEBUG] Inserting new song: ${song.id}")
                                     insert(song.toMediaMetadata()) { it.toggleUploaded() }
@@ -725,10 +727,9 @@ class SyncUtils @Inject constructor(
                                 } else {
                                     Timber.d("[UPLOAD_DEBUG] Song already marked as uploaded: ${song.id}")
                                 }
+                            } catch (e: Exception) {
+                                Timber.e(e, "[UPLOAD_DEBUG] Failed to process song: ${song.id}")
                             }
-                            delay(DB_OPERATION_DELAY_MS)
-                        } catch (e: Exception) {
-                            Timber.e(e, "[UPLOAD_DEBUG] Failed to process song: ${song.id}")
                         }
                     }
 

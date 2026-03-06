@@ -395,6 +395,14 @@
     <string name="spotify_token_expired">Spotify session expired, please log in again</string>
     <string name="spotify_no_tracks">No tracks found</string>
     <string name="spotify_mapping_info">The first time you play a song from Spotify, there may be a short delay while the app matches it to a YouTube Music equivalent. Subsequent plays will be instant thanks to local caching.</string>
+    <string name="spotify_preload_songs">Preload Spotify songs</string>
+    <string name="spotify_preload_songs_description">Fetch your playlists and liked songs, then convert and cache each track locally. Future playback will be faster.</string>
+    <string name="spotify_preload_start">Start preload</string>
+    <string name="spotify_preload_fetching_playlists">Fetching playlists…</string>
+    <string name="spotify_preload_counting">Calculating: %d songs to convert</string>
+    <string name="spotify_preload_converting">Converting song %1$d of %2$d</string>
+    <string name="spotify_preload_completed">Preload completed</string>
+    <string name="spotify_preload_cancelled">Preload cancelled</string>
     <string name="spotify_use_for_search">Use Spotify for search</string>
     <string name="spotify_use_for_search_description">Search results will come from Spotify instead of YouTube Music</string>
     <string name="spotify_use_for_home">Use Spotify for home</string>
