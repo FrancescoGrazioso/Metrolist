@@ -192,7 +192,7 @@ fun SongMenu(
     }
 
     if (showYouTubeMatchDialog) {
-        val mapper = remember { SpotifyYouTubeMapper(database, context.dataStore) }
+        val mapper = remember { SpotifyYouTubeMapper(database) }
         YouTubeMatchDialog(
             currentYouTubeId = resolvedSpotifyMatch?.youtubeId,
             onConfirm = { result ->

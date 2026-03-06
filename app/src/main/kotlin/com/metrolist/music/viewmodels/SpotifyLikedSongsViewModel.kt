@@ -7,7 +7,6 @@ package com.metrolist.music.viewmodels
 
 import android.content.Context
 import androidx.lifecycle.ViewModel
-import com.metrolist.music.utils.dataStore
 import androidx.lifecycle.viewModelScope
 import com.metrolist.music.db.MusicDatabase
 import com.metrolist.music.playback.SpotifyYouTubeMapper
@@ -29,7 +28,7 @@ constructor(
     @ApplicationContext private val context: Context,
     database: MusicDatabase,
 ) : ViewModel() {
-    val mapper = SpotifyYouTubeMapper(database, context.dataStore)
+    val mapper = SpotifyYouTubeMapper(database)
 
     private val _tracks = MutableStateFlow<List<SpotifyTrack>>(emptyList())
     val tracks = _tracks.asStateFlow()

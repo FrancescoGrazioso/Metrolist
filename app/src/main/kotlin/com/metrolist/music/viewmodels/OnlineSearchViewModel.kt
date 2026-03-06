@@ -15,6 +15,8 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.metrolist.innertube.YouTube
 import com.metrolist.innertube.models.SongItem
+import com.metrolist.innertube.models.WatchEndpoint.WatchEndpointMusicSupportedConfigs.WatchEndpointMusicConfig.Companion.MUSIC_VIDEO_TYPE_OMV
+import com.metrolist.innertube.models.WatchEndpoint.WatchEndpointMusicSupportedConfigs.WatchEndpointMusicConfig.Companion.MUSIC_VIDEO_TYPE_UGC
 import com.metrolist.innertube.models.YTItem
 import com.metrolist.innertube.models.filterExplicit
 import com.metrolist.innertube.models.filterVideoSongs
@@ -23,12 +25,16 @@ import com.metrolist.innertube.pages.SearchSummary
 import com.metrolist.innertube.pages.SearchSummaryPage
 import com.metrolist.music.constants.EnableSpotifyKey
 import com.metrolist.music.constants.HideExplicitKey
+import com.metrolist.music.constants.HideOmvSongsKey
+import com.metrolist.music.constants.HideUgcSongsKey
 import com.metrolist.music.constants.HideVideoSongsKey
 import com.metrolist.music.constants.HideYoutubeShortsKey
 import com.metrolist.music.constants.SpotifyAccessTokenKey
-import com.metrolist.music.utils.SpotifyTokenManager
 import com.metrolist.music.constants.UseSpotifySearchKey
+import com.metrolist.music.db.MusicDatabase
 import com.metrolist.music.models.ItemsPage
+import com.metrolist.music.playback.SpotifyYouTubeMapper
+import com.metrolist.music.utils.SpotifyTokenManager
 import com.metrolist.music.utils.dataStore
 import com.metrolist.music.utils.get
 import com.metrolist.music.utils.reportException
@@ -37,19 +43,17 @@ import com.metrolist.music.utils.toArtistItem
 import com.metrolist.music.utils.toPlaylistItem
 import com.metrolist.music.utils.toSongItem
 import com.metrolist.music.utils.toSpotifyTrackStub
-import com.metrolist.music.db.MusicDatabase
-import com.metrolist.music.playback.SpotifyYouTubeMapper
 import com.metrolist.spotify.Spotify
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
+import java.net.URLDecoder
+import javax.inject.Inject
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import timber.log.Timber
-import java.net.URLDecoder
-import javax.inject.Inject
 
 @HiltViewModel
 class OnlineSearchViewModel
@@ -60,7 +64,7 @@ constructor(
     database: MusicDatabase,
 ) : ViewModel() {
 
-    val spotifyYouTubeMapper = SpotifyYouTubeMapper(database, context.dataStore)
+    val spotifyYouTubeMapper = SpotifyYouTubeMapper(database)
     val query = try {
         URLDecoder.decode(savedStateHandle.get<String>("query")!!, "UTF-8")
     } catch (e: IllegalArgumentException) {
@@ -237,16 +241,29 @@ constructor(
     }
 
     private fun resolveSpotifyVideoTypes(items: List<SongItem>) {
-        for (item in items) {
-            val spotifyTrack = item.toSpotifyTrackStub() ?: continue
-            viewModelScope.launch(Dispatchers.IO) {
-                try {
-                    val metadata = spotifyYouTubeMapper.mapToYouTube(spotifyTrack)
-                    resolvedVideoTypes.update { map ->
-                        map + (item.id to metadata?.musicVideoType)
+        viewModelScope.launch(Dispatchers.IO) {
+            // Read hidden types once for the entire batch
+            val prefs = context.dataStore.data.first()
+            val hiddenTypes = buildSet {
+                if (prefs[HideUgcSongsKey] == true) add(MUSIC_VIDEO_TYPE_UGC)
+                if (prefs[HideOmvSongsKey] == true) add(MUSIC_VIDEO_TYPE_OMV)
+            }
+            val semaphore = kotlinx.coroutines.sync.Semaphore(3)
+
+            for (item in items) {
+                val spotifyTrack = item.toSpotifyTrackStub() ?: continue
+                launch {
+                    semaphore.acquire()
+                    try {
+                        val metadata = spotifyYouTubeMapper.mapToYouTube(spotifyTrack, hiddenTypes)
+                        resolvedVideoTypes.update { map ->
+                            map + (item.id to metadata?.musicVideoType)
+                        }
+                    } catch (e: Exception) {
+                        Timber.w(e, "Failed to resolve video type for ${item.title}")
+                    } finally {
+                        semaphore.release()
                     }
-                } catch (e: Exception) {
-                    Timber.w(e, "Failed to resolve video type for ${item.title}")
                 }
             }
         }

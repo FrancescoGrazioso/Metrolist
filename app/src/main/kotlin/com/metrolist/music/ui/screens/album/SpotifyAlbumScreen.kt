@@ -33,6 +33,7 @@ import androidx.compose.material3.TopAppBarScrollBehavior
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -45,9 +46,13 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavController
 import coil3.compose.AsyncImage
+import com.metrolist.innertube.models.WatchEndpoint.WatchEndpointMusicSupportedConfigs.WatchEndpointMusicConfig.Companion.MUSIC_VIDEO_TYPE_OMV
+import com.metrolist.innertube.models.WatchEndpoint.WatchEndpointMusicSupportedConfigs.WatchEndpointMusicConfig.Companion.MUSIC_VIDEO_TYPE_UGC
 import com.metrolist.music.LocalPlayerAwareWindowInsets
 import com.metrolist.music.LocalPlayerConnection
 import com.metrolist.music.R
+import com.metrolist.music.constants.HideOmvSongsKey
+import com.metrolist.music.constants.HideUgcSongsKey
 import com.metrolist.music.constants.ListThumbnailSize
 import com.metrolist.music.constants.ThumbnailCornerRadius
 import com.metrolist.music.playback.queues.SpotifyQueue
@@ -57,6 +62,7 @@ import com.metrolist.music.ui.component.ListItem
 import com.metrolist.music.ui.utils.backToMain
 import com.metrolist.music.utils.joinByBullet
 import com.metrolist.music.utils.makeTimeString
+import com.metrolist.music.utils.rememberPreference
 import com.metrolist.music.viewmodels.SpotifyAlbumViewModel
 import com.metrolist.spotify.SpotifyMapper
 
@@ -75,6 +81,14 @@ fun SpotifyAlbumScreen(
     val error by viewModel.error.collectAsState()
 
     val lazyListState = rememberLazyListState()
+    val (hideUgc) = rememberPreference(HideUgcSongsKey, defaultValue = false)
+    val (hideOmv) = rememberPreference(HideOmvSongsKey, defaultValue = false)
+    val hiddenVideoTypes = remember(hideUgc, hideOmv) {
+        buildSet {
+            if (hideUgc) add(MUSIC_VIDEO_TYPE_UGC)
+            if (hideOmv) add(MUSIC_VIDEO_TYPE_OMV)
+        }
+    }
 
     Box(modifier = Modifier.fillMaxSize()) {
         LazyColumn(
@@ -146,6 +160,7 @@ fun SpotifyAlbumScreen(
                                         SpotifyQueue(
                                             initialTrack = first,
                                             mapper = viewModel.mapper,
+                                            hiddenTypes = hiddenVideoTypes,
                                             context = viewModel.context,
                                             database = viewModel.database,
                                         )
@@ -169,6 +184,7 @@ fun SpotifyAlbumScreen(
                                         SpotifyQueue(
                                             initialTrack = first,
                                             mapper = viewModel.mapper,
+                                            hiddenTypes = hiddenVideoTypes,
                                             context = viewModel.context,
                                             database = viewModel.database,
                                         )
@@ -267,6 +283,7 @@ fun SpotifyAlbumScreen(
                                 SpotifyQueue(
                                     initialTrack = track,
                                     mapper = viewModel.mapper,
+                                    hiddenTypes = hiddenVideoTypes,
                                     context = viewModel.context,
                                     database = viewModel.database,
                                 )
