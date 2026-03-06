@@ -110,6 +110,50 @@ class SpotifyPlaylistQueue(
         }
     }
 
+    override suspend fun getFullStatus(): Queue.Status? = withContext(Dispatchers.IO) {
+        try {
+            // Build full list from scratch so we always include tracks 0..N (not just from startIndex onwards)
+            allTracks.clear()
+            if (initialTracks.isNotEmpty()) {
+                allTracks.addAll(initialTracks)
+                apiTotal = initialTracks.size
+                apiFetchOffset = apiTotal
+                apiHasMore = false
+            } else {
+                apiFetchOffset = 0
+                apiHasMore = true
+                val result = Spotify.playlistTracks(
+                    playlistId, limit = SPOTIFY_PAGE_SIZE, offset = 0
+                ).getOrThrow()
+                apiTotal = result.total
+                val fetched = result.items.mapNotNull { it.track?.takeIf { t -> !t.isLocal } }
+                allTracks.addAll(fetched)
+                apiFetchOffset = result.items.size
+                apiHasMore = apiFetchOffset < apiTotal
+            }
+            while (apiHasMore) {
+                fetchNextApiPage()
+            }
+            if (allTracks.isEmpty()) return@withContext null
+            val targetIndex = startIndex.coerceIn(0, allTracks.size - 1)
+            val resolvedItems = mutableListOf<MediaItem>()
+            var mediaItemIndex = 0
+            for (i in allTracks.indices) {
+                if (i == targetIndex) mediaItemIndex = resolvedItems.size
+                mapper.resolveToMediaItem(allTracks[i])?.let { resolvedItems.add(it) }
+            }
+            if (resolvedItems.isEmpty()) return@withContext null
+            mediaItemIndex = mediaItemIndex.coerceIn(0, resolvedItems.size - 1)
+            resolveOffset = allTracks.size
+            apiHasMore = false
+            Timber.d("SpotifyPlaylistQueue: getFullStatus resolved ${resolvedItems.size} tracks (startIndex=$targetIndex)")
+            Queue.Status(title = null, items = resolvedItems, mediaItemIndex = mediaItemIndex)
+        } catch (e: Exception) {
+            Timber.e(e, "SpotifyPlaylistQueue: getFullStatus failed")
+            null
+        }
+    }
+
     override suspend fun shuffleRemainingTracks() = withContext(Dispatchers.IO) {
         while (apiHasMore) {
             fetchNextApiPage()

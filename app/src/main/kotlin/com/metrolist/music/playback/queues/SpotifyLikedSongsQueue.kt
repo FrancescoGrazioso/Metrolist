@@ -99,6 +99,44 @@ class SpotifyLikedSongsQueue(
         }
     }
 
+    override suspend fun getFullStatus(): Queue.Status? = withContext(Dispatchers.IO) {
+        try {
+            // Build full list from scratch so we always include tracks 0..N (not just from startIndex onwards)
+            allTracks.clear()
+            apiFetchOffset = 0
+            apiHasMore = true
+            while (apiFetchOffset == 0 || apiHasMore) {
+                if (apiFetchOffset == 0) {
+                    val result = Spotify.likedSongs(limit = SPOTIFY_PAGE_SIZE, offset = 0).getOrThrow()
+                    apiTotal = result.total
+                    val fetched = result.items.map { it.track }.filter { !it.isLocal }
+                    allTracks.addAll(fetched)
+                    apiFetchOffset = result.items.size
+                    apiHasMore = apiFetchOffset < apiTotal
+                } else {
+                    fetchNextApiPage()
+                }
+            }
+            if (allTracks.isEmpty()) return@withContext null
+            val targetIndex = startIndex.coerceIn(0, allTracks.size - 1)
+            val resolvedItems = mutableListOf<MediaItem>()
+            var mediaItemIndex = 0
+            for (i in allTracks.indices) {
+                if (i == targetIndex) mediaItemIndex = resolvedItems.size
+                mapper.resolveToMediaItem(allTracks[i])?.let { resolvedItems.add(it) }
+            }
+            if (resolvedItems.isEmpty()) return@withContext null
+            mediaItemIndex = mediaItemIndex.coerceIn(0, resolvedItems.size - 1)
+            resolveOffset = allTracks.size
+            apiHasMore = false
+            Timber.d("SpotifyLikedSongsQueue: getFullStatus resolved ${resolvedItems.size} tracks (startIndex=$targetIndex)")
+            Queue.Status(title = null, items = resolvedItems, mediaItemIndex = mediaItemIndex)
+        } catch (e: Exception) {
+            Timber.e(e, "SpotifyLikedSongsQueue: getFullStatus failed")
+            null
+        }
+    }
+
     override suspend fun shuffleRemainingTracks() = withContext(Dispatchers.IO) {
         while (apiHasMore) {
             fetchNextApiPage()

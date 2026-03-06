@@ -1309,6 +1309,33 @@ class MusicService :
             player.playWhenReady = playWhenReady
         }
         scope.launch(SilentHandler) {
+            // When shuffle is enabled, use full playlist so shuffle includes all tracks (e.g. 227),
+            // not just from current position onwards. Queues that support it return non-null getFullStatus().
+            if (player.shuffleModeEnabled) {
+                val fullRaw = withContext(Dispatchers.IO) { queue.getFullStatus() }
+                if (fullRaw != null && fullRaw.items.isNotEmpty()) {
+                    val startIdBeforeFilter = fullRaw.items.getOrNull(fullRaw.mediaItemIndex)?.mediaId
+                    val fullStatus = fullRaw
+                        .filterExplicit(dataStore.get(HideExplicitKey, false))
+                        .filterVideoSongs(dataStore.get(HideVideoSongsKey, false))
+                    if (fullStatus.items.isEmpty()) return@launch
+                    if (fullStatus.title != null) queueTitle = fullStatus.title
+                    originalQueueSize = fullStatus.items.size
+                    val startIndex = if (startIdBeforeFilter != null) {
+                        fullStatus.items.indexOfFirst { it.mediaId == startIdBeforeFilter }
+                            .takeIf { it >= 0 } ?: 0
+                    } else {
+                        fullStatus.mediaItemIndex
+                    }.coerceIn(0, fullStatus.items.size - 1)
+                    player.setMediaItems(fullStatus.items, startIndex, fullStatus.position)
+                    player.prepare()
+                    player.playWhenReady = playWhenReady
+                    val shufflePlaylistFirst = dataStore.get(ShufflePlaylistFirstKey, false)
+                    applyShuffleOrder(startIndex, fullStatus.items.size, shufflePlaylistFirst)
+                    return@launch
+                }
+            }
+
             val initialStatus =
                 withContext(Dispatchers.IO) {
                     queue.getInitialStatus()
@@ -1320,7 +1347,6 @@ class MusicService :
                 queueTitle = initialStatus.title
             }
             if (initialStatus.items.isEmpty()) return@launch
-            // Track original queue size for shuffle playlist first feature
             originalQueueSize = initialStatus.items.size
             if (queue.preloadItem != null) {
                 player.addMediaItems(
@@ -1336,23 +1362,15 @@ class MusicService :
             } else {
                 player.setMediaItems(
                     initialStatus.items,
-                    if (initialStatus.mediaItemIndex >
-                        0
-                    ) {
-                        initialStatus.mediaItemIndex
-                    } else {
-                        0
-                    },
+                    if (initialStatus.mediaItemIndex > 0) initialStatus.mediaItemIndex else 0,
                     initialStatus.position,
                 )
                 player.prepare()
                 player.playWhenReady = playWhenReady
             }
 
-            // When shuffle is enabled, load the entire queue into the player so that
-            // shuffle applies to the full playlist (e.g. all 227 liked songs), not just
-            // the initial window of ~25 items.
             if (player.shuffleModeEnabled) {
+                // Fallback when queue doesn't support getFullStatus: load remaining pages then shuffle
                 withContext(Dispatchers.IO) { queue.shuffleRemainingTracks() }
                 while (queue.hasNextPage()) {
                     val moreItems = withContext(Dispatchers.IO) {
@@ -1367,8 +1385,6 @@ class MusicService :
                 val shufflePlaylistFirst = dataStore.get(ShufflePlaylistFirstKey, false)
                 applyShuffleOrder(player.currentMediaItemIndex, player.mediaItemCount, shufflePlaylistFirst)
             } else {
-                // Eagerly load the next page if the initial status has few items
-                // (e.g. Spotify queues return only the selected track for instant playback)
                 if (player.mediaItemCount <= QUEUE_PRELOAD_AHEAD_THRESHOLD && queue.hasNextPage()) {
                     val moreItems = withContext(Dispatchers.IO) {
                         queue.nextPage()
@@ -2110,10 +2126,33 @@ class MusicService :
             if (player.mediaItemCount == 0) return
 
             val queue = currentQueue ?: return
-            // If the queue has more pages (e.g. Spotify), load them all so shuffle
-            // applies to the full playlist, not just the current window.
-            if (queue.hasNextPage()) {
-                scope.launch(SilentHandler) {
+            val currentPositionMs = player.currentPosition
+            // Prefer full playlist so shuffle includes all tracks (e.g. 227), not just from current onwards.
+            scope.launch(SilentHandler) {
+                val fullStatus = withContext(Dispatchers.IO) {
+                    queue.getFullStatus()
+                        ?.filterExplicit(dataStore.get(HideExplicitKey, false))
+                        ?.filterVideoSongs(dataStore.get(HideVideoSongsKey, false))
+                }
+                if (fullStatus != null && fullStatus.items.isNotEmpty()) {
+                    val currentId = player.currentMetadata?.id
+                    val startIndex = if (currentId != null) {
+                        fullStatus.items.indexOfFirst { it.mediaId == currentId }.takeIf { it >= 0 }
+                            ?: fullStatus.mediaItemIndex
+                    } else {
+                        fullStatus.mediaItemIndex
+                    }.coerceIn(0, fullStatus.items.size - 1)
+                    player.setMediaItems(fullStatus.items, startIndex, currentPositionMs.coerceAtLeast(0L))
+                    player.prepare()
+                    if (player.playbackState != Player.STATE_IDLE) {
+                        player.playWhenReady = true
+                    }
+                    originalQueueSize = fullStatus.items.size
+                    val shufflePlaylistFirst = dataStore.get(ShufflePlaylistFirstKey, false)
+                    applyShuffleOrder(startIndex, fullStatus.items.size, shufflePlaylistFirst)
+                    return@launch
+                }
+                if (queue.hasNextPage()) {
                     withContext(Dispatchers.IO) { queue.shuffleRemainingTracks() }
                     while (queue.hasNextPage()) {
                         val moreItems = withContext(Dispatchers.IO) {
@@ -2127,10 +2166,10 @@ class MusicService :
                     originalQueueSize = player.mediaItemCount
                     val shufflePlaylistFirst = dataStore.get(ShufflePlaylistFirstKey, false)
                     applyShuffleOrder(player.currentMediaItemIndex, player.mediaItemCount, shufflePlaylistFirst)
+                } else {
+                    val shufflePlaylistFirst = dataStore.get(ShufflePlaylistFirstKey, false)
+                    applyShuffleOrder(player.currentMediaItemIndex, player.mediaItemCount, shufflePlaylistFirst)
                 }
-            } else {
-                val shufflePlaylistFirst = dataStore.get(ShufflePlaylistFirstKey, false)
-                applyShuffleOrder(player.currentMediaItemIndex, player.mediaItemCount, shufflePlaylistFirst)
             }
         }
 
