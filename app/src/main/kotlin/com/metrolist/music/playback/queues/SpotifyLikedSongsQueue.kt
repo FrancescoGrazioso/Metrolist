@@ -28,6 +28,7 @@ import timber.log.Timber
 class SpotifyLikedSongsQueue(
     private val startIndex: Int = 0,
     private val mapper: SpotifyYouTubeMapper,
+    private val hiddenTypes: Set<String> = emptySet(),
     override val preloadItem: MediaMetadata? = null,
 ) : Queue {
 
@@ -70,7 +71,7 @@ class SpotifyLikedSongsQueue(
             val windowTracks = allTracks.subList(windowStart, windowEnd)
 
             val resolvedItems = coroutineScope {
-                windowTracks.map { track -> async { mapper.resolveToMediaItem(track) } }
+                windowTracks.map { track -> async { mapper.resolveToMediaItem(track, hiddenTypes) } }
                     .awaitAll()
                     .filterNotNull()
             }
@@ -174,7 +175,7 @@ class SpotifyLikedSongsQueue(
             "(offset=$resolveOffset/${allTracks.size}, apiTotal=$apiTotal)")
 
         coroutineScope {
-            batch.map { track -> async { mapper.resolveToMediaItem(track) } }
+            batch.map { track -> async { mapper.resolveToMediaItem(track, hiddenTypes) } }
                 .awaitAll()
                 .filterNotNull()
         }

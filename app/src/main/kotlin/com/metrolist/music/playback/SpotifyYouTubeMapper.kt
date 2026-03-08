@@ -7,6 +7,7 @@ package com.metrolist.music.playback
 
 import com.metrolist.innertube.YouTube
 import com.metrolist.innertube.models.SongItem
+import com.metrolist.innertube.models.WatchEndpoint.WatchEndpointMusicSupportedConfigs.WatchEndpointMusicConfig.Companion.MUSIC_VIDEO_TYPE_ATV
 import com.metrolist.innertube.pages.SearchSummaryPage
 import com.metrolist.music.db.MusicDatabase
 import com.metrolist.music.db.entities.SpotifyMatchEntity
@@ -29,19 +30,28 @@ class SpotifyYouTubeMapper(
     /**
      * Maps a Spotify track to a YouTube MediaMetadata by searching YouTube Music.
      * Returns null if no suitable match is found.
+     *
+     * @param hiddenTypes set of MUSIC_VIDEO_TYPE_* constants to exclude from results.
+     *                    Read once by the caller from DataStore preferences.
      */
-    suspend fun mapToYouTube(track: SpotifyTrack): MediaMetadata? = withContext(Dispatchers.IO) {
+    suspend fun mapToYouTube(
+        track: SpotifyTrack,
+        hiddenTypes: Set<String> = emptySet(),
+    ): MediaMetadata? = withContext(Dispatchers.IO) {
         val cached = database.getSpotifyMatch(track.id)
-        if (cached != null) {
-            Timber.d("Spotify match cache hit: ${track.name} -> ${cached.youtubeId} (manual=${cached.isManualOverride})")
-            return@withContext buildMediaMetadata(cached.youtubeId, track, cached.title, cached.artist)
+        if (cached != null && !cached.isManualOverride && cached.musicVideoType in hiddenTypes) {
+            Timber.d("Spotify cache hit but type ${cached.musicVideoType} is hidden, re-resolving: ${track.name}")
+            database.deleteSpotifyMatch(track.id)
+        } else if (cached != null) {
+            Timber.d("Spotify match cache hit: ${track.name} -> ${cached.youtubeId} (type=${cached.musicVideoType}, manual=${cached.isManualOverride})")
+            return@withContext buildMediaMetadata(cached.youtubeId, track, cached.title, cached.artist, musicVideoType = cached.musicVideoType)
         }
 
         val query = SpotifyMapper.buildSearchQuery(track)
         Timber.d("Searching YouTube for Spotify track: $query")
 
         val searchResult = YouTube.searchSummary(query).getOrNull() ?: return@withContext null
-        val bestMatch = findBestMatch(track, searchResult)
+        val bestMatch = findBestMatch(track, searchResult, hiddenTypes)
 
         if (bestMatch != null) {
             database.upsertSpotifyMatch(
@@ -51,15 +61,17 @@ class SpotifyYouTubeMapper(
                     title = bestMatch.title,
                     artist = bestMatch.artists.firstOrNull()?.name ?: "",
                     matchScore = bestMatch.score,
+                    musicVideoType = bestMatch.musicVideoType,
                 )
             )
-            Timber.d("Spotify match found: ${track.name} -> ${bestMatch.id} (score: ${bestMatch.score})")
+            Timber.d("Spotify match found: ${track.name} -> ${bestMatch.id} (type=${bestMatch.musicVideoType}, score: ${bestMatch.score})")
             return@withContext buildMediaMetadata(
                 youtubeId = bestMatch.id,
                 spotifyTrack = track,
                 ytTitle = bestMatch.title,
                 ytArtist = bestMatch.artistName,
                 ytThumbnailUrl = bestMatch.thumbnailUrl,
+                musicVideoType = bestMatch.musicVideoType,
             )
         }
 
@@ -96,9 +108,12 @@ class SpotifyYouTubeMapper(
      * ResolvingDataSource to resolve the actual stream URL.
      * Returns null if no match was found (track will be skipped).
      */
-    suspend fun resolveToMediaItem(track: SpotifyTrack): androidx.media3.common.MediaItem? {
+    suspend fun resolveToMediaItem(
+        track: SpotifyTrack,
+        hiddenTypes: Set<String> = emptySet(),
+    ): androidx.media3.common.MediaItem? {
         Timber.d("SpotifyMapper: resolving '${track.name}' by ${track.artists.firstOrNull()?.name}")
-        val metadata = mapToYouTube(track)
+        val metadata = mapToYouTube(track, hiddenTypes)
         if (metadata == null) {
             Timber.w("SpotifyMapper: FAILED to resolve '${track.name}' - no YouTube match")
             return null
@@ -110,17 +125,28 @@ class SpotifyYouTubeMapper(
     private fun findBestMatch(
         spotifyTrack: SpotifyTrack,
         searchResult: SearchSummaryPage,
+        hiddenTypes: Set<String> = emptySet(),
     ): MatchCandidate? {
         val spotifyArtist = spotifyTrack.artists.firstOrNull()?.name ?: ""
         val candidates = mutableListOf<MatchCandidate>()
 
-        // Extract SongItems from all search summaries
-        val songs = searchResult.summaries
+        // Extract SongItems from all search summaries, filtering hidden video types
+        val allSongs = searchResult.summaries
             .flatMap { it.items }
             .filterIsInstance<SongItem>()
+        val songs = if (hiddenTypes.isNotEmpty()) {
+            val filtered = allSongs.filter { it.musicVideoType !in hiddenTypes }
+            // Guard: if all candidates were filtered out, fall back to unfiltered list
+            filtered.ifEmpty {
+                Timber.w("All candidates filtered by hiddenTypes=$hiddenTypes, falling back to unfiltered")
+                allSongs
+            }
+        } else {
+            allSongs
+        }
 
         for (song in songs) {
-            val score = SpotifyMapper.matchScore(
+            val rawScore = SpotifyMapper.matchScore(
                 spotifyTitle = spotifyTrack.name,
                 spotifyArtist = spotifyArtist,
                 spotifyDurationMs = spotifyTrack.durationMs,
@@ -128,6 +154,9 @@ class SpotifyYouTubeMapper(
                 candidateArtist = song.artists.firstOrNull()?.name ?: "",
                 candidateDurationSec = song.duration,
             )
+            // Prefer official audio tracks (ATV) over live versions, music videos, or UGC
+            val atvBonus = if (song.musicVideoType == MUSIC_VIDEO_TYPE_ATV) ATV_SCORE_BONUS else 0.0
+            val score = rawScore + atvBonus
             candidates.add(
                 MatchCandidate(
                     id = song.id,
@@ -140,6 +169,7 @@ class SpotifyYouTubeMapper(
                     albumTitle = song.album?.name,
                     explicit = song.explicit,
                     score = score,
+                    musicVideoType = song.musicVideoType,
                 )
             )
         }
@@ -153,6 +183,7 @@ class SpotifyYouTubeMapper(
         ytTitle: String,
         ytArtist: String,
         ytThumbnailUrl: String? = null,
+        musicVideoType: String? = null,
     ): MediaMetadata {
         val thumbnail = SpotifyMapper.getTrackThumbnail(spotifyTrack)
             ?: ytThumbnailUrl
@@ -172,6 +203,7 @@ class SpotifyYouTubeMapper(
                 MediaMetadata.Album(id = it.id, title = it.name)
             },
             explicit = spotifyTrack.explicit,
+            musicVideoType = musicVideoType,
         )
     }
 
@@ -186,9 +218,15 @@ class SpotifyYouTubeMapper(
         val albumTitle: String?,
         val explicit: Boolean,
         val score: Double,
+        val musicVideoType: String? = null,
     )
 
     companion object {
         private const val MIN_MATCH_THRESHOLD = 0.35
+
+        // Bonus applied to official audio tracks (MUSIC_VIDEO_TYPE_ATV) during scoring.
+        // Ensures studio recordings are preferred over live versions and user-generated content
+        // when title/artist/duration scores are otherwise similar.
+        private const val ATV_SCORE_BONUS = 0.05
     }
 }
