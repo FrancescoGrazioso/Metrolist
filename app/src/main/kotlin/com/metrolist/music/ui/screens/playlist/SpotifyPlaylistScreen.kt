@@ -5,6 +5,7 @@
 
 package com.metrolist.music.ui.screens.playlist
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Box
@@ -21,22 +22,34 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextField
+import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarScrollBehavior
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
@@ -80,6 +93,34 @@ fun SpotifyPlaylistScreen(
     val lazyListState = rememberLazyListState()
 
     val mapper = remember { SpotifyYouTubeMapper(database) }
+
+    var isSearching by rememberSaveable { mutableStateOf(false) }
+    var query by rememberSaveable(stateSaver = TextFieldValue.Saver) {
+        mutableStateOf(TextFieldValue())
+    }
+
+    val filteredTracks = remember(tracks, query) {
+        if (query.text.isEmpty()) {
+            tracks
+        } else {
+            tracks.filter { track ->
+                track.name.contains(query.text, ignoreCase = true) ||
+                    track.artists.any { it.name.contains(query.text, ignoreCase = true) }
+            }
+        }
+    }
+
+    val focusRequester = remember { FocusRequester() }
+    LaunchedEffect(isSearching) {
+        if (isSearching) {
+            focusRequester.requestFocus()
+        }
+    }
+
+    BackHandler(enabled = isSearching) {
+        isSearching = false
+        query = TextFieldValue()
+    }
 
     Box(modifier = Modifier.fillMaxSize()) {
         LazyColumn(
@@ -193,11 +234,13 @@ fun SpotifyPlaylistScreen(
             }
 
             // Track list
+            val displayTracks = if (isSearching) filteredTracks else tracks
             itemsIndexed(
-                items = tracks,
+                items = displayTracks,
                 key = { index, track -> "track_${track.id}_$index" },
             ) { index, track ->
                 val thumbnailUrl = SpotifyMapper.getTrackThumbnail(track)
+                val originalIndex = if (isSearching) tracks.indexOf(track).coerceAtLeast(0) else index
 
                 ListItem(
                     title = track.name,
@@ -222,7 +265,7 @@ fun SpotifyPlaylistScreen(
                                     SpotifyPlaylistQueue(
                                         playlistId = viewModel.playlistId,
                                         initialTracks = tracks,
-                                        startIndex = index,
+                                        startIndex = originalIndex,
                                         mapper = viewModel.mapper,
                                     )
                                 )
@@ -243,16 +286,68 @@ fun SpotifyPlaylistScreen(
         }
 
         TopAppBar(
-            title = { Text(playlist?.name ?: stringResource(R.string.playlists)) },
+            title = {
+                if (isSearching) {
+                    TextField(
+                        value = query,
+                        onValueChange = { query = it },
+                        placeholder = {
+                            Text(
+                                text = stringResource(R.string.search),
+                                style = MaterialTheme.typography.titleLarge,
+                            )
+                        },
+                        singleLine = true,
+                        textStyle = MaterialTheme.typography.titleLarge,
+                        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
+                        colors = TextFieldDefaults.colors(
+                            focusedContainerColor = Color.Transparent,
+                            unfocusedContainerColor = Color.Transparent,
+                            focusedIndicatorColor = Color.Transparent,
+                            unfocusedIndicatorColor = Color.Transparent,
+                            disabledIndicatorColor = Color.Transparent,
+                        ),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .focusRequester(focusRequester),
+                    )
+                } else {
+                    Text(playlist?.name ?: stringResource(R.string.playlists))
+                }
+            },
             navigationIcon = {
                 IconButton(
-                    onClick = navController::navigateUp,
-                    onLongClick = navController::backToMain,
+                    onClick = {
+                        if (isSearching) {
+                            isSearching = false
+                            query = TextFieldValue()
+                        } else {
+                            navController.navigateUp()
+                        }
+                    },
+                    onLongClick = {
+                        if (!isSearching) {
+                            navController.backToMain()
+                        }
+                    },
                 ) {
                     Icon(
                         painterResource(R.drawable.arrow_back),
                         contentDescription = null,
                     )
+                }
+            },
+            actions = {
+                if (!isSearching) {
+                    IconButton(
+                        onClick = { isSearching = true },
+                        onLongClick = {},
+                    ) {
+                        Icon(
+                            painterResource(R.drawable.search),
+                            contentDescription = null,
+                        )
+                    }
                 }
             },
         )
