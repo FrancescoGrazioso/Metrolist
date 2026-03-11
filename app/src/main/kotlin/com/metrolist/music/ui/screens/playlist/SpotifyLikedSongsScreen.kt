@@ -59,6 +59,7 @@ import com.metrolist.music.R
 import com.metrolist.music.constants.ListThumbnailSize
 import com.metrolist.music.constants.ThumbnailCornerRadius
 import com.metrolist.music.playback.queues.SpotifyLikedSongsQueue
+import com.metrolist.music.ui.component.DraggableScrollbar
 import com.metrolist.music.ui.component.IconButton
 import com.metrolist.music.ui.component.ItemThumbnail
 import com.metrolist.music.ui.component.ListItem
@@ -270,6 +271,14 @@ fun SpotifyLikedSongsScreen(
                 )
             }
         }
+
+        DraggableScrollbar(
+            modifier = Modifier
+                .padding(LocalPlayerAwareWindowInsets.current.asPaddingValues())
+                .align(Alignment.CenterEnd),
+            scrollState = lazyListState,
+            headerItems = 1,
+        )
 
         TopAppBar(
             title = {

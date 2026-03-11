@@ -56,6 +56,7 @@ import com.metrolist.music.constants.YtmSyncKey
 import com.metrolist.music.extensions.toMediaItem
 import com.metrolist.music.playback.queues.ListQueue
 import com.metrolist.music.ui.component.ChipsRow
+import com.metrolist.music.ui.component.DraggableScrollbar
 import com.metrolist.music.ui.component.HideOnScrollFAB
 import com.metrolist.music.ui.component.LocalMenuState
 import com.metrolist.music.ui.component.SongListItem
@@ -251,6 +252,14 @@ fun LibrarySongsScreen(
                 )
             }
         }
+
+        DraggableScrollbar(
+            modifier = Modifier
+                .padding(LocalPlayerAwareWindowInsets.current.asPaddingValues())
+                .align(Alignment.CenterEnd),
+            scrollState = lazyListState,
+            headerItems = 2,
+        )
 
         HideOnScrollFAB(
             visible = filteredSongs.isNotEmpty(),
