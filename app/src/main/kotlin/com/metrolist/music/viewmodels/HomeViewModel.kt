@@ -69,6 +69,7 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import kotlinx.serialization.json.Json
 import timber.log.Timber
 import java.time.LocalDate
 import javax.inject.Inject
@@ -771,13 +772,24 @@ class HomeViewModel @Inject constructor(
                 ))
             }
 
-            // Section 5: Your Playlists (GQL — no rate limit)
+            // Section 5: Your Playlists (GQL — no rate limit, with cache fallback)
             Spotify.myPlaylists(limit = 10).onSuccess { paging ->
                 if (paging.items.isNotEmpty()) {
                     sections.add(SpotifyHomeSection(
                         title = "spotify_your_playlists",
                         type = SectionType.PLAYLISTS,
                         playlists = paging.items,
+                    ))
+                }
+            }.onFailure { e ->
+                Timber.e(e, "HomeVM: Failed to load Spotify playlists for Home — ${e.message}")
+                val cached = loadCachedPlaylists()
+                if (cached.isNotEmpty()) {
+                    Timber.d("HomeVM: Using ${cached.size} cached playlists as fallback")
+                    sections.add(SpotifyHomeSection(
+                        title = "spotify_your_playlists",
+                        type = SectionType.PLAYLISTS,
+                        playlists = cached.take(10),
                     ))
                 }
             }
@@ -792,6 +804,8 @@ class HomeViewModel @Inject constructor(
                         albums = albums,
                     ))
                 }
+            }.onFailure { e ->
+                Timber.e(e, "HomeVM: Failed to load Spotify new releases — ${e.message}")
             }
 
             // Section 7: Discover — artists not in the top section
@@ -888,6 +902,20 @@ class HomeViewModel @Inject constructor(
             episodesForLater.value = episodes
         }.onFailure {
             reportException(it)
+        }
+    }
+
+    private val playlistCacheJson = Json { ignoreUnknownKeys = true }
+    private val playlistCacheKey = androidx.datastore.preferences.core.stringPreferencesKey("spotify_cached_playlists_json")
+
+    private suspend fun loadCachedPlaylists(): List<SpotifyPlaylist> {
+        return try {
+            val prefs = context.dataStore.data.first()
+            val jsonStr = prefs[playlistCacheKey] ?: return emptyList()
+            playlistCacheJson.decodeFromString<List<SpotifyPlaylist>>(jsonStr)
+        } catch (e: Exception) {
+            Timber.w(e, "HomeVM: failed to load cached playlists")
+            emptyList()
         }
     }
 

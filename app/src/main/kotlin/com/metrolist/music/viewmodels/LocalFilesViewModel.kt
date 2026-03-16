@@ -6,6 +6,7 @@
 package com.metrolist.music.viewmodels
 
 import android.content.Context
+import android.media.MediaMetadataRetriever
 import android.net.Uri
 import android.provider.MediaStore
 import androidx.lifecycle.ViewModel
@@ -32,6 +33,7 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import timber.log.Timber
+import java.io.File
 import java.time.LocalDateTime
 import javax.inject.Inject
 
@@ -64,7 +66,7 @@ constructor(
             try {
                 performScan()
             } catch (e: Exception) {
-                Timber.tag("LocalFilesViewModel").e(e, "Error scanning local files")
+                Timber.tag("LocalFilesVM").e(e, "Error scanning local files")
             } finally {
                 _isScanning.value = false
             }
@@ -72,6 +74,8 @@ constructor(
     }
 
     private fun performScan() {
+        val artworkDir = File(context.cacheDir, "artwork").also { it.mkdirs() }
+
         val projection = arrayOf(
             MediaStore.Audio.Media._ID,
             MediaStore.Audio.Media.TITLE,
@@ -109,13 +113,17 @@ constructor(
 
                 val songId = "local:$mediaStoreId"
 
-                // Only insert if not already in DB
                 val existing = database.getSongByIdBlocking(songId)
                 if (existing == null) {
-                        val songEntity = SongEntity(
+                    val thumbnailUri = extractAndCacheArtwork(
+                        contentUri, songId, artworkDir,
+                    )
+
+                    val songEntity = SongEntity(
                         id = songId,
                         title = title,
                         duration = (durationMs / 1000).toInt(),
+                        thumbnailUrl = thumbnailUri,
                         albumName = album,
                         isLocal = true,
                         localPath = contentUri,
@@ -137,11 +145,54 @@ constructor(
                             insert(SongArtistMap(songId = songId, artistId = artistId, position = 0))
                         }
                     }
-                } else if (existing.song.localPath != contentUri) {
-                    // Update path if changed (e.g. file moved)
-                    database.query { setLocalPath(songId, contentUri) }
+                } else {
+                    if (existing.song.localPath != contentUri) {
+                        database.query { setLocalPath(songId, contentUri) }
+                    }
+                    // Backfill artwork for songs that were imported before artwork extraction
+                    if (existing.song.thumbnailUrl == null) {
+                        val thumbnailUri = extractAndCacheArtwork(
+                            contentUri, songId, artworkDir,
+                        )
+                        if (thumbnailUri != null) {
+                            database.query {
+                                upsert(existing.song.copy(thumbnailUrl = thumbnailUri))
+                            }
+                        }
+                    }
                 }
             }
+        }
+    }
+
+    /**
+     * Extracts embedded cover art from a local audio file via its content URI
+     * and saves it to the artwork cache directory. Returns a file:// URI
+     * pointing to the cached image, or null if no artwork is embedded.
+     */
+    private fun extractAndCacheArtwork(
+        contentUri: String,
+        songId: String,
+        artworkDir: File,
+    ): String? {
+        val safeFileName = songId.replace(":", "_") + ".jpg"
+        val artworkFile = File(artworkDir, safeFileName)
+
+        if (artworkFile.exists()) {
+            return Uri.fromFile(artworkFile).toString()
+        }
+
+        val retriever = MediaMetadataRetriever()
+        return try {
+            retriever.setDataSource(context, Uri.parse(contentUri))
+            val artBytes = retriever.embeddedPicture ?: return null
+            artworkFile.writeBytes(artBytes)
+            Uri.fromFile(artworkFile).toString()
+        } catch (e: Exception) {
+            Timber.tag("LocalFilesVM").w(e, "Failed to extract artwork for $songId")
+            null
+        } finally {
+            try { retriever.release() } catch (_: Exception) {}
         }
     }
 }

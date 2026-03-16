@@ -11,6 +11,8 @@
 package com.metrolist.music.viewmodels
 
 import android.content.Context
+import androidx.datastore.preferences.core.edit
+import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.metrolist.music.constants.EnableSpotifyKey
@@ -30,9 +32,12 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import kotlinx.serialization.encodeToString
+import kotlinx.serialization.json.Json
 import timber.log.Timber
 import javax.inject.Inject
 
@@ -46,6 +51,8 @@ constructor(
 
     companion object {
         private const val STAGGER_DELAY_MS = 500L
+        private val CACHE_KEY_PLAYLISTS = stringPreferencesKey("spotify_cached_playlists_json")
+        private val jsonSerializer = Json { ignoreUnknownKeys = true; encodeDefaults = true }
     }
 
     val spotifyYouTubeMapper = SpotifyYouTubeMapper(database)
@@ -175,10 +182,16 @@ constructor(
         _playlistsError.value = null
 
         if (!SpotifyTokenManager.ensureAuthenticated()) {
-            Timber.w("SpotifyVM: loadPlaylists() - auth failed")
-            _playlistsError.value = "Not authenticated"
+            Timber.w("SpotifyVM: loadPlaylists() - auth failed, trying cache fallback")
+            val cached = loadPlaylistsFromCache()
+            if (cached.isNotEmpty()) {
+                Timber.d("SpotifyVM: loadPlaylists() - using ${cached.size} cached playlists")
+                _spotifyPlaylists.value = cached
+            } else {
+                _playlistsError.value = "Not authenticated"
+                setFallback("Authentication failed while loading playlists")
+            }
             _playlistsLoading.value = false
-            setFallback("Authentication failed while loading playlists")
             return 0
         }
 
@@ -189,16 +202,50 @@ constructor(
                 Timber.d("SpotifyVM:   playlist: '${pl.name}' (${pl.tracks?.total ?: "?"} tracks)")
             }
             _spotifyPlaylists.value = paging.items
+            savePlaylistsToCache(paging.items)
         }.onFailure { e ->
-            Timber.e(e, "SpotifyVM: loadPlaylists() - FAILED")
-            _playlistsError.value = e.message
+            Timber.e(e, "SpotifyVM: loadPlaylists() - FAILED: ${e.message}")
             retryAfter = (e as? Spotify.SpotifyException)?.retryAfterSec ?: 0
             handleAuthError(e)
-            setFallback("Failed to load playlists: ${e.message}")
+
+            val cached = loadPlaylistsFromCache()
+            if (cached.isNotEmpty()) {
+                Timber.d("SpotifyVM: loadPlaylists() - API failed, using ${cached.size} cached playlists")
+                _spotifyPlaylists.value = cached
+                _playlistsError.value = null
+            } else {
+                _playlistsError.value = e.message
+                setFallback("Failed to load playlists: ${e.message}")
+            }
         }
 
         _playlistsLoading.value = false
         return retryAfter
+    }
+
+    private suspend fun savePlaylistsToCache(playlists: List<SpotifyPlaylist>) {
+        try {
+            val jsonStr = jsonSerializer.encodeToString(playlists)
+            context.dataStore.edit { prefs ->
+                prefs[CACHE_KEY_PLAYLISTS] = jsonStr
+            }
+            Timber.d("SpotifyVM: cached ${playlists.size} playlists to DataStore")
+        } catch (e: Exception) {
+            Timber.w(e, "SpotifyVM: failed to cache playlists")
+        }
+    }
+
+    private suspend fun loadPlaylistsFromCache(): List<SpotifyPlaylist> {
+        return try {
+            val prefs = context.dataStore.data.first()
+            val jsonStr = prefs[CACHE_KEY_PLAYLISTS] ?: return emptyList()
+            val playlists = jsonSerializer.decodeFromString<List<SpotifyPlaylist>>(jsonStr)
+            Timber.d("SpotifyVM: loaded ${playlists.size} playlists from DataStore cache")
+            playlists
+        } catch (e: Exception) {
+            Timber.w(e, "SpotifyVM: failed to load playlists from cache")
+            emptyList()
+        }
     }
 
     /** @return Retry-After seconds if 429 was hit, 0 otherwise */

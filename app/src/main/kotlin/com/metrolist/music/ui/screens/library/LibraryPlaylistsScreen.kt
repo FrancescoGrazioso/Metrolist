@@ -468,6 +468,48 @@ fun LibraryPlaylistsScreen(
                         }
                     }
 
+                    // Spotify playlists failed to load banner
+                    if (isSpotifyActive && !needsSpotifyReLogin && isUsingFallback && spotifyPlaylists.isEmpty()) {
+                        item(key = "spotify_load_error_banner") {
+                            androidx.compose.material3.Card(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 16.dp, vertical = 8.dp),
+                                colors = androidx.compose.material3.CardDefaults.cardColors(
+                                    containerColor = MaterialTheme.colorScheme.errorContainer,
+                                ),
+                            ) {
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(12.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                ) {
+                                    Icon(
+                                        painterResource(R.drawable.spotify),
+                                        contentDescription = null,
+                                        tint = MaterialTheme.colorScheme.onErrorContainer,
+                                    )
+                                    Spacer(modifier = Modifier.padding(horizontal = 8.dp))
+                                    Text(
+                                        text = stringResource(R.string.spotify_playlists_load_error),
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        color = MaterialTheme.colorScheme.onErrorContainer,
+                                        modifier = Modifier.weight(1f),
+                                    )
+                                    androidx.compose.material3.TextButton(
+                                        onClick = { spotifyViewModel.loadPlaylists() },
+                                    ) {
+                                        Text(
+                                            text = stringResource(R.string.retry),
+                                            color = MaterialTheme.colorScheme.onErrorContainer,
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+
                     // Spotify Liked Songs as a special playlist entry
                     if (isSpotifyActive && spotifyLikedSongsTotal > 0) {
                         item(key = "spotify_liked_songs") {
@@ -708,6 +750,51 @@ fun LibraryPlaylistsScreen(
                                 playlist = playlist,
                                 modifier = Modifier.animateItem()
                             )
+                        }
+                    }
+
+                    // Spotify playlists failed to load banner (grid)
+                    if (isSpotifyActive && !needsSpotifyReLogin && isUsingFallback && spotifyPlaylists.isEmpty()) {
+                        item(
+                            key = "spotify_load_error_banner",
+                            span = { GridItemSpan(maxLineSpan) },
+                        ) {
+                            androidx.compose.material3.Card(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 16.dp, vertical = 8.dp),
+                                colors = androidx.compose.material3.CardDefaults.cardColors(
+                                    containerColor = MaterialTheme.colorScheme.errorContainer,
+                                ),
+                            ) {
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(12.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                ) {
+                                    Icon(
+                                        painterResource(R.drawable.spotify),
+                                        contentDescription = null,
+                                        tint = MaterialTheme.colorScheme.onErrorContainer,
+                                    )
+                                    Spacer(modifier = Modifier.padding(horizontal = 8.dp))
+                                    Text(
+                                        text = stringResource(R.string.spotify_playlists_load_error),
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        color = MaterialTheme.colorScheme.onErrorContainer,
+                                        modifier = Modifier.weight(1f),
+                                    )
+                                    androidx.compose.material3.TextButton(
+                                        onClick = { spotifyViewModel.loadPlaylists() },
+                                    ) {
+                                        Text(
+                                            text = stringResource(R.string.retry),
+                                            color = MaterialTheme.colorScheme.onErrorContainer,
+                                        )
+                                    }
+                                }
+                            }
                         }
                     }
 

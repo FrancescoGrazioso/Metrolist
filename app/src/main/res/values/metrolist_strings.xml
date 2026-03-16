@@ -382,6 +382,7 @@
     <string name="spotify_liked_songs">Spotify Liked Songs</string>
     <string name="spotify_session_expired">Spotify session expired. Please log in again.</string>
     <string name="spotify_relogin">Log in again</string>
+    <string name="spotify_playlists_load_error">Failed to load Spotify playlists. This may be a temporary issue.</string>
     <string name="spotify_music_source">Music Source</string>
     <string name="spotify_music_source_description">Choose where to load your library from</string>
     <string name="spotify_source_youtube">YouTube Music</string>
@@ -391,6 +392,10 @@
     <string name="spotify_status_connecting">Obtaining access token…</string>
     <string name="spotify_status_loading_profile">Loading your profile…</string>
     <string name="spotify_login_error">Login failed. Please try again.</string>
+    <string name="spotify_login_error_no_cookie">Could not retrieve session cookie. Please try logging in again.</string>
+    <string name="spotify_login_error_expired">Session expired or invalid. Please log in with your credentials again.</string>
+    <string name="spotify_login_error_rejected">Spotify rejected the request. Please try again later.</string>
+    <string name="spotify_login_error_network">Network error. Please check your connection and try again.</string>
     <string name="spotify_login_success">Connected to Spotify</string>
     <string name="spotify_token_expired">Spotify session expired, please log in again</string>
     <string name="spotify_no_tracks">No tracks found</string>

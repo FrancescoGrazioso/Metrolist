@@ -1273,6 +1273,8 @@ fun ItemThumbnail(
                     .build(),
                 contentDescription = null,
                 contentScale = if (cropAlbumArt) ContentScale.Crop else ContentScale.Fit,
+                placeholder = painterResource(R.drawable.music_note),
+                error = painterResource(R.drawable.music_note),
                 modifier = Modifier
                     .fillMaxWidth()
                     .clip(shape)

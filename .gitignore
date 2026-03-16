@@ -111,3 +111,5 @@ app/src/main/cpp/coverart/
 
 # Internal development notes
 ROADMAP_NOTES.md
+.spotify_gql_endpoints.json
+SPOTIFY_GQL_REFERENCE.md
